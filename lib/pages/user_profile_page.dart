@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -16,7 +15,7 @@ class UserProfilePage extends StatefulWidget {
 }
 
 class _UserProfilePageState extends State<UserProfilePage> {
-  Map<String, dynamic>? _user; // cache dari SharedPreferences / API
+  Map<String, dynamic>? _user;
   bool _loading = true;
   String? _error;
 
@@ -30,7 +29,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
     // 1) Tampilkan data awal dari SharedPreferences (cepat)
     await _loadFromPrefs();
 
-    // 2) (Opsional) segarkan dari server (diam-diam). Abaikan kalau belum ada empno.
+    // 2) Segarkan dari server (opsional)
     unawaited(_fetchLatestProfile(silent: true));
   }
 
@@ -62,23 +61,20 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 
   /// Ambil profil terbaru dari API (opsional)
-  /// Sesuaikan endpoint & parameter sesuai backend kamu.
   Future<void> _fetchLatestProfile({bool silent = false}) async {
     final baseUrl = dotenv.env['API_URL'];
     if (baseUrl == null || baseUrl.isEmpty) {
-      // Tidak dianggap error fatal kalau silent
       if (!silent) {
         _showSnack('API_URL belum diset di .env');
       }
       return;
     }
 
+    // Ambil user_id dari data yang tersimpan
     final current = _user ?? {};
-    final empNo = (current['empno'] ?? current['employee_no'] ?? current['id'])
-        ?.toString();
-    if (empNo == null || empNo.isEmpty) {
-      if (!silent)
-        _showSnack('EmpNo / ID pengguna tidak ditemukan pada data lokal');
+    final userId = current['id']?.toString();
+    if (userId == null || userId.isEmpty) {
+      if (!silent) _showSnack('User ID tidak ditemukan pada data lokal');
       return;
     }
 
@@ -87,14 +83,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
     http.Client? client;
     try {
       client = http.Client();
-
-      // >>>> SESUAIKAN ENDPOINT INI <<<<
-      // Contoh: GET ${API_URL}/profile.php?empno=EMP001
-      final uri = Uri.parse('$baseUrl/profile.php').replace(
-        queryParameters: {
-          'empno': empNo, // ganti dengan parameter yang backend kamu butuhkan
-        },
-      );
+      final uri = Uri.parse(
+        '$baseUrl/profile.php',
+      ).replace(queryParameters: {'user_id': userId});
 
       final res = await client
           .get(uri, headers: {'Accept': 'application/json'})
@@ -106,15 +97,13 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
       final body = utf8.decode(res.bodyBytes);
       final json = jsonDecode(body);
+      final profile = json['data'] as Map<String, dynamic>?;
 
-      // JSON bisa berupa object tunggal atau array; ambil object pertama kalau array
-      final profile = (json is List && json.isNotEmpty)
-          ? (json.first is Map
-                ? Map<String, dynamic>.from(json.first)
-                : {'raw': json.first})
-          : (json is Map ? Map<String, dynamic>.from(json) : {'raw': json});
+      if (profile == null) {
+        if (!silent) _showSnack('Profil tidak ditemukan di server');
+        return;
+      }
 
-      // Merge dengan data lokal agar field yang tidak dikirim server tetap ada
       final merged = {...current, ...profile};
 
       setState(() {
@@ -144,7 +133,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
-  // Helper ambil nilai dengan fallback "—"
   String _v(String key, {String fallback = '—'}) {
     final value = _user?[key];
     if (value == null) return fallback;
@@ -159,6 +147,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Profil Saya'),
+        backgroundColor: Colors.blue,
         centerTitle: true,
         actions: [
           IconButton(
@@ -185,11 +174,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
               padding: const EdgeInsets.all(16),
               children: [
                 _Header(
-                  name: _v('fullname', fallback: _v('name')),
+                  name: _v('fullname', fallback: _v('user_name')),
                   role: _v('position', fallback: 'Posisi / Jabatan'),
                 ),
                 const SizedBox(height: 16),
-
                 const _SectionTitle('Informasi Pribadi'),
                 Card(
                   clipBehavior: Clip.antiAlias,
@@ -205,118 +193,71 @@ class _UserProfilePageState extends State<UserProfilePage> {
                       _InfoTile(
                         icon: Icons.person_outline,
                         label: 'Full Name',
-                        value: _v('fullname', fallback: _v('name')),
+                        value: _v('fullname', fallback: _v('user_name')),
                       ),
                       _InfoTile(
                         icon: Icons.email_outlined,
                         label: 'Email',
                         value: _v('email'),
                       ),
-                      _InfoTile(
-                        icon: Icons.phone_outlined,
-                        label: 'Phone',
-                        value: _v('phone'),
-                      ),
-                      _InfoTile(
-                        icon: Icons.location_on_outlined,
-                        label: 'Address',
-                        value: _v('address'),
-                      ),
                     ],
                   ),
-                ),
-
-                const SizedBox(height: 12),
-                const _SectionTitle('Organisasi'),
-                Card(
-                  clipBehavior: Clip.antiAlias,
-                  elevation: 0,
-                  color: theme.colorScheme.surface,
-                  child: Column(
-                    children: [
-                      _InfoTile(
-                        icon: Icons.apartment_outlined,
-                        label: 'Department',
-                        value: _v('department'),
-                      ),
-                      _InfoTile(
-                        icon: Icons.work_outline,
-                        label: 'Position',
-                        value: _v('position'),
-                      ),
-                      _InfoTile(
-                        icon: Icons.schedule_outlined,
-                        label: 'Join Date',
-                        value: _v('join_date'),
-                      ),
-                      _InfoTile(
-                        icon: Icons.place_outlined,
-                        label: 'Office Location',
-                        value: _v('office_location'),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-                // Tombol edit belum aktif—nanti dihubungkan ke form
-                FilledButton.icon(
-                  onPressed: null, // TODO: aktifkan saat form siap
-                  icon: const Icon(Icons.edit),
-                  label: const Text('Edit Profil'),
                 ),
               ],
             ),
 
-      // Bottom nav: tandai tab User (index 3) sebagai aktif
-      bottomNavigationBar: _buildBottomNavBar(context, currentIndex: 3),
-    );
-  }
-
-  BottomNavigationBar _buildBottomNavBar(
-    BuildContext context, {
-    int currentIndex = 3,
-  }) {
-    return BottomNavigationBar(
-      type: BottomNavigationBarType.fixed,
-      currentIndex: currentIndex,
-      items: const [
-        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-        BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Settings'),
-        BottomNavigationBarItem(icon: Icon(Icons.info_outline), label: 'About'),
-        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'User'),
-      ],
-      onTap: (index) {
-        if (index == currentIndex) return;
-        switch (index) {
-          case 0:
-            if (Navigator.canPop(context)) {
-              Navigator.pop(context); // kembali ke list
-            }
-            break;
-          case 1:
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Settings: coming soon')),
-            );
-            break;
-          case 2:
-            showAboutDialog(
-              context: context,
-              applicationName: 'HRIS DGE',
-              applicationVersion: '1.0.0',
-            );
-            break;
-          case 3:
-          default:
-            break;
-        }
-      },
+      bottomNavigationBar: BottomNavigationBar(
+        type: BottomNavigationBarType.fixed,
+        currentIndex: 3,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.settings),
+            label: 'Settings',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.info_outline),
+            label: 'About',
+          ),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'User'),
+        ],
+        onTap: (index) {
+          switch (index) {
+            case 0:
+              // Contoh: kembali ke halaman sebelumnya
+              if (Navigator.canPop(context)) {
+                Navigator.pop(context);
+              }
+              break;
+            case 1:
+              // Tampilkan pesan untuk halaman Settings
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Settings: Coming Soon!')),
+              );
+              break;
+            case 2:
+              // Tampilkan About dialog
+              showAboutDialog(
+                context: context,
+                applicationName: 'HRIS DGE',
+                applicationVersion: '1.0.0',
+              );
+              break;
+            case 3:
+              // Do nothing, already on this page
+              break;
+          }
+        },
+      ),
     );
   }
 }
 
-/// ===== Widget UI reusable =====
+// Tambahkan kode untuk widget pembantu di sini (contoh: _Header, _InfoTile, dll.)
+// Karena kode Anda sebelumnya sudah punya, saya tidak ulangi di sini.
 
+// Helper widgets (seperti _Header, _InfoTile, _EmptyState)
+// yang sudah Anda miliki di kode sebelumnya.
 class _Header extends StatelessWidget {
   final String name;
   final String role;
@@ -454,7 +395,6 @@ class _InfoTile extends StatelessWidget {
   }
 }
 
-/// State kosong jika belum login / gagal load
 class _EmptyState extends StatelessWidget {
   final String message;
   final VoidCallback onLogin;
