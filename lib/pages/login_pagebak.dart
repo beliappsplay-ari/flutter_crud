@@ -1,4 +1,3 @@
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
@@ -32,13 +31,11 @@ class _LoginPageState extends State<LoginPage> {
       print('Attempting to connect to API...');
       print('Login attempt with:'); // Debug print
       print('Username: ${_usernameController.text}'); // Debug print
-      //print('API URL: dotenv.env['API_URL']!/login.php'); // Debug print
-      print('API URL: ${dotenv.env['API_URL']}/login.php');
+      print('API URL: http://192.168.0.103/api_hris/login.php'); // Debug print
 
       final response = await http
           .post(
-            //Uri.parse('dotenv.env['API_URL']!/login.php'),
-            Uri.parse('${dotenv.env['API_URL']}/login.php'),
+            Uri.parse('http://192.168.0.103/api_hris/login.php'),
             headers: {
               'Content-Type': 'application/json',
               'Accept': 'application/json',

@@ -4,11 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // Fixed import
 import 'pages/login_page.dart';
 import 'pages/halaman_produk.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+//import 'package:flutter_dotenv/flutter_dotenv.dart' as dotenv;
 
 void main() async {
-  // Tambah async
-  // Ini penting untuk memastikan Flutter binding diinisialisasi
+  // Inisialisasi Flutter binding dulu
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Baru load environment
+  await dotenv.load();
 
   // Cek status login dari SharedPreferences
   final prefs = await SharedPreferences.getInstance();

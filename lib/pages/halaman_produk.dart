@@ -1,7 +1,11 @@
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:flutter_crud/tambah_produk.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'login_page.dart';
+import 'user_profile_page.dart';
 import 'package:http/http.dart' as http;
 
 class HalamanProduk extends StatefulWidget {
@@ -16,10 +20,24 @@ class _HalamanProdukState extends State<HalamanProduk> {
   bool _loading = true;
   String _errorMessage = '';
 
+  Future<void> _logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear(); // Menghapus semua data dari SharedPreferences
+
+    if (!mounted) return;
+
+    // Kembali ke halaman login dan hapus semua halaman sebelumnya
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (context) => LoginPage()),
+      (Route<dynamic> route) => false,
+    );
+  }
+
   Future _getData() async {
     // List URL untuk dicoba secara berurutan
     //List<String> urls = ['http://192.168.0.121:80/api_hris/read.php'];
-    List<String> urls = ['http://192.168.0.103:80/api_hris/read.php'];
+    // List<String> urls = ['dotenv.env['API_URL']!/read.php'];
+    List<String> urls = ['${dotenv.env['API_URL']}/read.php'];
 
     for (String url in urls) {
       try {
@@ -132,6 +150,11 @@ class _HalamanProdukState extends State<HalamanProduk> {
               _getData();
             },
           ),
+          IconButton(
+            icon: Icon(Icons.logout),
+            onPressed: _logout,
+            tooltip: 'Logout',
+          ),
         ],
       ),
       body: _loading
@@ -215,12 +238,19 @@ class _HalamanProdukState extends State<HalamanProduk> {
       items: const [
         BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
         BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Settings'),
-        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+        BottomNavigationBarItem(icon: Icon(Icons.info_outline), label: 'About'),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'User'),
       ],
       currentIndex: 0,
       onTap: (index) {
         // Handle navigation if needed
+        if (index == 3) {
+          // Buka tab User (Profil)
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const UserProfilePage()),
+          );
+        }
       },
     );
   }
