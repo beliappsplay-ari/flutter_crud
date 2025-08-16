@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'login_page.dart';
+import 'login_page.dart'; // Pastikan path benar
 
 class UserProfilePage extends StatefulWidget {
   const UserProfilePage({super.key});
@@ -62,11 +62,28 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   /// Ambil profil terbaru dari API (opsional)
   Future<void> _fetchLatestProfile({bool silent = false}) async {
+    // Dapatkan URL API dari .env
     final baseUrl = dotenv.env['API_URL'];
     if (baseUrl == null || baseUrl.isEmpty) {
       if (!silent) {
         _showSnack('API_URL belum diset di .env');
       }
+      return;
+    }
+
+    // Ambil token dari SharedPreferences
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token');
+
+    // Jika token tidak ada, beri tahu user untuk login
+    if (token == null || token.isEmpty) {
+      if (!silent)
+        _showSnack('Token otentikasi tidak ditemukan. Silakan login ulang.');
+      // Arahkan ke halaman login jika token tidak ada
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginPage()),
+        (_) => false,
+      );
       return;
     }
 
@@ -84,12 +101,28 @@ class _UserProfilePageState extends State<UserProfilePage> {
     try {
       client = http.Client();
       final uri = Uri.parse(
-        '$baseUrl/profile.php',
+        '$baseUrl/profile',
       ).replace(queryParameters: {'user_id': userId});
 
       final res = await client
-          .get(uri, headers: {'Accept': 'application/json'})
+          .get(
+            uri,
+            headers: {
+              'Accept': 'application/json',
+              'Authorization': 'Bearer $token', // Sertakan token di header
+            },
+          )
           .timeout(const Duration(seconds: 12));
+
+      if (res.statusCode == 401) {
+        // Tangani Unauthorized (token kadaluarsa, dll.)
+        _showSnack('Sesi Anda habis. Silakan login ulang.');
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LoginPage()),
+          (_) => false,
+        );
+        return;
+      }
 
       if (res.statusCode != 200) {
         throw Exception('Server error: ${res.statusCode}');
@@ -200,64 +233,18 @@ class _UserProfilePageState extends State<UserProfilePage> {
                         label: 'Email',
                         value: _v('email'),
                       ),
+                      // Tambahkan _InfoTile lainnya sesuai data dari API
                     ],
                   ),
                 ),
               ],
             ),
-
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        currentIndex: 3,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
-            label: 'Settings',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.info_outline),
-            label: 'About',
-          ),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'User'),
-        ],
-        onTap: (index) {
-          switch (index) {
-            case 0:
-              // Contoh: kembali ke halaman sebelumnya
-              if (Navigator.canPop(context)) {
-                Navigator.pop(context);
-              }
-              break;
-            case 1:
-              // Tampilkan pesan untuk halaman Settings
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Settings: Coming Soon!')),
-              );
-              break;
-            case 2:
-              // Tampilkan About dialog
-              showAboutDialog(
-                context: context,
-                applicationName: 'HRIS DGE',
-                applicationVersion: '1.0.0',
-              );
-              break;
-            case 3:
-              // Do nothing, already on this page
-              break;
-          }
-        },
-      ),
     );
   }
 }
 
-// Tambahkan kode untuk widget pembantu di sini (contoh: _Header, _InfoTile, dll.)
-// Karena kode Anda sebelumnya sudah punya, saya tidak ulangi di sini.
+// ... (widget pembantu lainnya seperti _Header, _InfoTile, dll. tetap sama)
 
-// Helper widgets (seperti _Header, _InfoTile, _EmptyState)
-// yang sudah Anda miliki di kode sebelumnya.
 class _Header extends StatelessWidget {
   final String name;
   final String role;
@@ -304,7 +291,7 @@ class _Header extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           IconButton(
-            onPressed: null, // TODO: quick edit / ubah avatar
+            onPressed: null,
             icon: Icon(
               Icons.camera_alt_outlined,
               color: scheme.onPrimaryContainer,
