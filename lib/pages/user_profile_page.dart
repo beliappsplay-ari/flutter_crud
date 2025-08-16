@@ -1,101 +1,278 @@
-import 'package:flutter/material.dart';
-// TIDAK mengimport halaman_produk.dart untuk menghindari circular import.
+import 'dart:async';
+import 'dart:convert';
 
-class UserProfilePage extends StatelessWidget {
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'login_page.dart';
+
+class UserProfilePage extends StatefulWidget {
   const UserProfilePage({super.key});
+
+  @override
+  State<UserProfilePage> createState() => _UserProfilePageState();
+}
+
+class _UserProfilePageState extends State<UserProfilePage> {
+  Map<String, dynamic>? _user; // cache dari SharedPreferences / API
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _bootstrap();
+  }
+
+  Future<void> _bootstrap() async {
+    // 1) Tampilkan data awal dari SharedPreferences (cepat)
+    await _loadFromPrefs();
+
+    // 2) (Opsional) segarkan dari server (diam-diam). Abaikan kalau belum ada empno.
+    unawaited(_fetchLatestProfile(silent: true));
+  }
+
+  Future<void> _loadFromPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('user');
+
+      if (raw == null) {
+        setState(() {
+          _loading = false;
+          _error = 'Belum ada data user. Silakan login terlebih dahulu.';
+        });
+        return;
+      }
+
+      final data = jsonDecode(raw);
+      setState(() {
+        _user = (data is Map) ? Map<String, dynamic>.from(data) : {'raw': data};
+        _loading = false;
+        _error = null;
+      });
+    } catch (e) {
+      setState(() {
+        _loading = false;
+        _error = 'Gagal memuat data user: $e';
+      });
+    }
+  }
+
+  /// Ambil profil terbaru dari API (opsional)
+  /// Sesuaikan endpoint & parameter sesuai backend kamu.
+  Future<void> _fetchLatestProfile({bool silent = false}) async {
+    final baseUrl = dotenv.env['API_URL'];
+    if (baseUrl == null || baseUrl.isEmpty) {
+      // Tidak dianggap error fatal kalau silent
+      if (!silent) {
+        _showSnack('API_URL belum diset di .env');
+      }
+      return;
+    }
+
+    final current = _user ?? {};
+    final empNo = (current['empno'] ?? current['employee_no'] ?? current['id'])
+        ?.toString();
+    if (empNo == null || empNo.isEmpty) {
+      if (!silent)
+        _showSnack('EmpNo / ID pengguna tidak ditemukan pada data lokal');
+      return;
+    }
+
+    if (!silent) setState(() => _loading = true);
+
+    http.Client? client;
+    try {
+      client = http.Client();
+
+      // >>>> SESUAIKAN ENDPOINT INI <<<<
+      // Contoh: GET ${API_URL}/profile.php?empno=EMP001
+      final uri = Uri.parse('$baseUrl/profile.php').replace(
+        queryParameters: {
+          'empno': empNo, // ganti dengan parameter yang backend kamu butuhkan
+        },
+      );
+
+      final res = await client
+          .get(uri, headers: {'Accept': 'application/json'})
+          .timeout(const Duration(seconds: 12));
+
+      if (res.statusCode != 200) {
+        throw Exception('Server error: ${res.statusCode}');
+      }
+
+      final body = utf8.decode(res.bodyBytes);
+      final json = jsonDecode(body);
+
+      // JSON bisa berupa object tunggal atau array; ambil object pertama kalau array
+      final profile = (json is List && json.isNotEmpty)
+          ? (json.first is Map
+                ? Map<String, dynamic>.from(json.first)
+                : {'raw': json.first})
+          : (json is Map ? Map<String, dynamic>.from(json) : {'raw': json});
+
+      // Merge dengan data lokal agar field yang tidak dikirim server tetap ada
+      final merged = {...current, ...profile};
+
+      setState(() {
+        _user = merged;
+        _loading = false;
+        _error = null;
+      });
+
+      if (!silent) _showSnack('Profil diperbarui');
+    } on TimeoutException {
+      if (!silent) {
+        setState(() => _loading = false);
+        _showSnack('Timeout saat mengambil profil');
+      }
+    } catch (e) {
+      if (!silent) {
+        setState(() => _loading = false);
+        _showSnack('Gagal memperbarui profil: $e');
+      }
+    } finally {
+      client?.close();
+    }
+  }
+
+  void _showSnack(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  // Helper ambil nilai dengan fallback "—"
+  String _v(String key, {String fallback = '—'}) {
+    final value = _user?[key];
+    if (value == null) return fallback;
+    final s = value.toString().trim();
+    return s.isEmpty ? fallback : s;
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Profil Saya'), centerTitle: true),
-
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          const _Header(name: 'Nama User', role: 'Posisi / Jabatan'),
-          const SizedBox(height: 16),
-
-          const _SectionTitle('Informasi Pribadi'),
-          Card(
-            clipBehavior: Clip.antiAlias,
-            elevation: 0,
-            color: theme.colorScheme.surface,
-            child: const Column(
-              children: [
-                _InfoTile(icon: Icons.badge, label: 'Employee No', value: '—'),
-                _InfoTile(
-                  icon: Icons.person_outline,
-                  label: 'Full Name',
-                  value: '—',
-                ),
-                _InfoTile(
-                  icon: Icons.email_outlined,
-                  label: 'Email',
-                  value: '—',
-                ),
-                _InfoTile(
-                  icon: Icons.phone_outlined,
-                  label: 'Phone',
-                  value: '—',
-                ),
-                _InfoTile(
-                  icon: Icons.location_on_outlined,
-                  label: 'Address',
-                  value: '—',
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 12),
-          const _SectionTitle('Organisasi'),
-          Card(
-            clipBehavior: Clip.antiAlias,
-            elevation: 0,
-            color: theme.colorScheme.surface,
-            child: const Column(
-              children: [
-                _InfoTile(
-                  icon: Icons.apartment_outlined,
-                  label: 'Department',
-                  value: '—',
-                ),
-                _InfoTile(
-                  icon: Icons.work_outline,
-                  label: 'Position',
-                  value: '—',
-                ),
-                _InfoTile(
-                  icon: Icons.schedule_outlined,
-                  label: 'Join Date',
-                  value: '—',
-                ),
-                _InfoTile(
-                  icon: Icons.place_outlined,
-                  label: 'Office Location',
-                  value: '—',
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 24),
-          FilledButton.icon(
-            onPressed: null, // TODO: aktifkan saat form siap
-            icon: const Icon(Icons.edit),
-            label: const Text('Edit Profil'),
+      appBar: AppBar(
+        title: const Text('Profil Saya'),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            tooltip: 'Refresh',
+            onPressed: () => _fetchLatestProfile(silent: false),
+            icon: const Icon(Icons.refresh),
           ),
         ],
       ),
 
-      // >>> PENTING: bottomNavigationBar dipasang DI SINI
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : (_error != null)
+          ? _EmptyState(
+              message: _error!,
+              onLogin: () {
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const LoginPage()),
+                  (_) => false,
+                );
+              },
+            )
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                _Header(
+                  name: _v('fullname', fallback: _v('name')),
+                  role: _v('position', fallback: 'Posisi / Jabatan'),
+                ),
+                const SizedBox(height: 16),
+
+                const _SectionTitle('Informasi Pribadi'),
+                Card(
+                  clipBehavior: Clip.antiAlias,
+                  elevation: 0,
+                  color: theme.colorScheme.surface,
+                  child: Column(
+                    children: [
+                      _InfoTile(
+                        icon: Icons.badge,
+                        label: 'Employee No',
+                        value: _v('empno'),
+                      ),
+                      _InfoTile(
+                        icon: Icons.person_outline,
+                        label: 'Full Name',
+                        value: _v('fullname', fallback: _v('name')),
+                      ),
+                      _InfoTile(
+                        icon: Icons.email_outlined,
+                        label: 'Email',
+                        value: _v('email'),
+                      ),
+                      _InfoTile(
+                        icon: Icons.phone_outlined,
+                        label: 'Phone',
+                        value: _v('phone'),
+                      ),
+                      _InfoTile(
+                        icon: Icons.location_on_outlined,
+                        label: 'Address',
+                        value: _v('address'),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+                const _SectionTitle('Organisasi'),
+                Card(
+                  clipBehavior: Clip.antiAlias,
+                  elevation: 0,
+                  color: theme.colorScheme.surface,
+                  child: Column(
+                    children: [
+                      _InfoTile(
+                        icon: Icons.apartment_outlined,
+                        label: 'Department',
+                        value: _v('department'),
+                      ),
+                      _InfoTile(
+                        icon: Icons.work_outline,
+                        label: 'Position',
+                        value: _v('position'),
+                      ),
+                      _InfoTile(
+                        icon: Icons.schedule_outlined,
+                        label: 'Join Date',
+                        value: _v('join_date'),
+                      ),
+                      _InfoTile(
+                        icon: Icons.place_outlined,
+                        label: 'Office Location',
+                        value: _v('office_location'),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+                // Tombol edit belum aktif—nanti dihubungkan ke form
+                FilledButton.icon(
+                  onPressed: null, // TODO: aktifkan saat form siap
+                  icon: const Icon(Icons.edit),
+                  label: const Text('Edit Profil'),
+                ),
+              ],
+            ),
+
+      // Bottom nav: tandai tab User (index 3) sebagai aktif
       bottomNavigationBar: _buildBottomNavBar(context, currentIndex: 3),
     );
   }
 
-  /// Builder BottomNavigationBar untuk halaman ini
   BottomNavigationBar _buildBottomNavBar(
     BuildContext context, {
     int currentIndex = 3,
@@ -110,18 +287,11 @@ class UserProfilePage extends StatelessWidget {
         BottomNavigationBarItem(icon: Icon(Icons.person), label: 'User'),
       ],
       onTap: (index) {
-        if (index == currentIndex) return; // sudah di tab yang sama
-
+        if (index == currentIndex) return;
         switch (index) {
           case 0:
-            // Kembali ke halaman sebelumnya (HalamanProduk) tanpa circular import
             if (Navigator.canPop(context)) {
-              Navigator.pop(context);
-            } else {
-              // fallback: tampilkan pesan / nanti bisa pakai named route
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Tidak ada halaman sebelumnya')),
-              );
+              Navigator.pop(context); // kembali ke list
             }
             break;
           case 1:
@@ -145,7 +315,7 @@ class UserProfilePage extends StatelessWidget {
   }
 }
 
-/// ===== Widget-Widget kecil untuk membangun UI =====
+/// ===== Widget UI reusable =====
 
 class _Header extends StatelessWidget {
   final String name;
@@ -177,7 +347,7 @@ class _Header extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    name,
+                    name.isNotEmpty ? name : 'Nama User',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -186,7 +356,7 @@ class _Header extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(role),
+                  Text(role.isNotEmpty ? role : 'Posisi / Jabatan'),
                 ],
               ),
             ),
@@ -277,9 +447,48 @@ class _InfoTile extends StatelessWidget {
     return ListTile(
       leading: Icon(icon, color: scheme.primary),
       title: Text(label),
-      subtitle: Text(value),
+      subtitle: Text(value.isNotEmpty ? value : '—'),
       dense: true,
       visualDensity: VisualDensity.compact,
+    );
+  }
+}
+
+/// State kosong jika belum login / gagal load
+class _EmptyState extends StatelessWidget {
+  final String message;
+  final VoidCallback onLogin;
+
+  const _EmptyState({required this.message, required this.onLogin});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.person_off_outlined,
+              size: 64,
+              color: Colors.redAccent,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.red),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: onLogin,
+              icon: const Icon(Icons.login),
+              label: const Text('Ke Halaman Login'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
