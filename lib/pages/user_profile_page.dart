@@ -1,11 +1,7 @@
-import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
-import 'login_page.dart';
+import '../services/employee_service.dart';
+import '../services/auth_service.dart';
+import '../models/user_model.dart';
 
 class UserProfilePage extends StatefulWidget {
   const UserProfilePage({super.key});
@@ -15,419 +11,279 @@ class UserProfilePage extends StatefulWidget {
 }
 
 class _UserProfilePageState extends State<UserProfilePage> {
-  Map<String, dynamic>? _user;
-  bool _loading = true;
-  String? _error;
+  final EmployeeService _employeeService = EmployeeService();
+  final AuthService _authService = AuthService();
+
+  User? _currentUser;
+  bool _isLoading = true;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _bootstrap();
+    _loadUserProfile();
   }
 
-  Future<void> _bootstrap() async {
-    // 1) Tampilkan data awal dari SharedPreferences (cepat)
-    await _loadFromPrefs();
+  Future<void> _loadUserProfile() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
-    // 2) Segarkan dari server (opsional)
-    unawaited(_fetchLatestProfile(silent: true));
-  }
-
-  Future<void> _loadFromPrefs() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString('user');
+      // Coba ambil dari cache dulu
+      final cachedUser = await _authService.getSavedUser();
+      if (cachedUser != null) {
+        setState(() => _currentUser = cachedUser);
+      }
 
-      if (raw == null) {
+      // Lalu ambil data terbaru dari server
+      final result = await _employeeService.getCurrentUserWithEmployee();
+
+      if (mounted) {
+        if (result.success && result.user != null) {
+          setState(() {
+            _currentUser = result.user;
+            _isLoading = false;
+          });
+          // Update cache
+          await _authService.saveUser(result.user!);
+        } else {
+          setState(() {
+            _errorMessage = result.message;
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         setState(() {
-          _loading = false;
-          _error = 'Belum ada data user. Silakan login terlebih dahulu.';
+          _errorMessage = 'Error loading profile: $e';
+          _isLoading = false;
         });
-        return;
       }
-
-      final data = jsonDecode(raw);
-      setState(() {
-        _user = (data is Map) ? Map<String, dynamic>.from(data) : {'raw': data};
-        _loading = false;
-        _error = null;
-      });
-    } catch (e) {
-      setState(() {
-        _loading = false;
-        _error = 'Gagal memuat data user: $e';
-      });
     }
-  }
-
-  /// Ambil profil terbaru dari API (opsional)
-  Future<void> _fetchLatestProfile({bool silent = false}) async {
-    final baseUrl = dotenv.env['API_URL'];
-    if (baseUrl == null || baseUrl.isEmpty) {
-      if (!silent) {
-        _showSnack('API_URL belum diset di .env');
-      }
-      return;
-    }
-
-    // Ambil user_id dari data yang tersimpan
-    final current = _user ?? {};
-    final userId = current['id']?.toString();
-    if (userId == null || userId.isEmpty) {
-      if (!silent) _showSnack('User ID tidak ditemukan pada data lokal');
-      return;
-    }
-
-    if (!silent) setState(() => _loading = true);
-
-    http.Client? client;
-    try {
-      client = http.Client();
-      final uri = Uri.parse(
-        '$baseUrl/profile.php',
-      ).replace(queryParameters: {'user_id': userId});
-
-      final res = await client
-          .get(uri, headers: {'Accept': 'application/json'})
-          .timeout(const Duration(seconds: 12));
-
-      if (res.statusCode != 200) {
-        throw Exception('Server error: ${res.statusCode}');
-      }
-
-      final body = utf8.decode(res.bodyBytes);
-      final json = jsonDecode(body);
-      final profile = json['data'] as Map<String, dynamic>?;
-
-      if (profile == null) {
-        if (!silent) _showSnack('Profil tidak ditemukan di server');
-        return;
-      }
-
-      final merged = {...current, ...profile};
-
-      setState(() {
-        _user = merged;
-        _loading = false;
-        _error = null;
-      });
-
-      if (!silent) _showSnack('Profil diperbarui');
-    } on TimeoutException {
-      if (!silent) {
-        setState(() => _loading = false);
-        _showSnack('Timeout saat mengambil profil');
-      }
-    } catch (e) {
-      if (!silent) {
-        setState(() => _loading = false);
-        _showSnack('Gagal memperbarui profil: $e');
-      }
-    } finally {
-      client?.close();
-    }
-  }
-
-  void _showSnack(String msg) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-  }
-
-  String _v(String key, {String fallback = '—'}) {
-    final value = _user?[key];
-    if (value == null) return fallback;
-    final s = value.toString().trim();
-    return s.isEmpty ? fallback : s;
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    if (_isLoading && _currentUser == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    if (_errorMessage != null && _currentUser == null) {
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
+              const SizedBox(height: 16),
+              Text(
+                'Error Loading Profile',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Text(
+                  _errorMessage!,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _loadUserProfile,
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Profil Saya'),
-        backgroundColor: Colors.blue,
-        centerTitle: true,
+        title: const Text('Profile'),
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
           IconButton(
-            tooltip: 'Refresh',
-            onPressed: () => _fetchLatestProfile(silent: false),
             icon: const Icon(Icons.refresh),
+            onPressed: _loadUserProfile,
+            tooltip: 'Refresh',
           ),
         ],
       ),
-
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : (_error != null)
-          ? _EmptyState(
-              message: _error!,
-              onLogin: () {
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (_) => const LoginPage()),
-                  (_) => false,
-                );
-              },
-            )
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                _Header(
-                  name: _v('fullname', fallback: _v('user_name')),
-                  role: _v('position', fallback: 'Posisi / Jabatan'),
-                ),
+      body: RefreshIndicator(
+        onRefresh: _loadUserProfile,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildUserInfoCard(),
+              const SizedBox(height: 16),
+              if (_currentUser?.employee != null) ...[
+                _buildEmployeeInfoCard(),
                 const SizedBox(height: 16),
-                const _SectionTitle('Informasi Pribadi'),
-                Card(
-                  clipBehavior: Clip.antiAlias,
-                  elevation: 0,
-                  color: theme.colorScheme.surface,
+                _buildEmployeeDetailsCard(),
+              ] else
+                _buildNoEmployeeCard(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUserInfoCard() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 30,
+                  backgroundColor: Theme.of(context).primaryColor,
+                  child: Text(
+                    _currentUser?.name.substring(0, 1).toUpperCase() ?? 'U',
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _InfoTile(
-                        icon: Icons.badge,
-                        label: 'Employee No',
-                        value: _v('empno'),
+                      Text(
+                        'User Information',
+                        style: Theme.of(context).textTheme.titleLarge,
                       ),
-                      _InfoTile(
-                        icon: Icons.person_outline,
-                        label: 'Full Name',
-                        value: _v('fullname', fallback: _v('user_name')),
-                      ),
-                      _InfoTile(
-                        icon: Icons.email_outlined,
-                        label: 'Email',
-                        value: _v('email'),
+                      const SizedBox(height: 4),
+                      Text(
+                        'ID: ${_currentUser?.id ?? 'N/A'}',
+                        style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
                   ),
                 ),
               ],
             ),
-
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        currentIndex: 3,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
-            label: 'Settings',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.info_outline),
-            label: 'About',
-          ),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'User'),
-        ],
-        onTap: (index) {
-          switch (index) {
-            case 0:
-              // Contoh: kembali ke halaman sebelumnya
-              if (Navigator.canPop(context)) {
-                Navigator.pop(context);
-              }
-              break;
-            case 1:
-              // Tampilkan pesan untuk halaman Settings
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Settings: Coming Soon!')),
-              );
-              break;
-            case 2:
-              // Tampilkan About dialog
-              showAboutDialog(
-                context: context,
-                applicationName: 'HRIS DGE',
-                applicationVersion: '1.0.0',
-              );
-              break;
-            case 3:
-              // Do nothing, already on this page
-              break;
-          }
-        },
-      ),
-    );
-  }
-}
-
-// Tambahkan kode untuk widget pembantu di sini (contoh: _Header, _InfoTile, dll.)
-// Karena kode Anda sebelumnya sudah punya, saya tidak ulangi di sini.
-
-// Helper widgets (seperti _Header, _InfoTile, _EmptyState)
-// yang sudah Anda miliki di kode sebelumnya.
-class _Header extends StatelessWidget {
-  final String name;
-  final String role;
-  const _Header({required this.name, required this.role});
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [scheme.primaryContainer, scheme.primary.withOpacity(0.75)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 20),
-      child: Row(
-        children: [
-          _Avatar(name: name),
-          const SizedBox(width: 16),
-          Expanded(
-            child: DefaultTextStyle(
-              style: TextStyle(color: scheme.onPrimaryContainer),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    name.isNotEmpty ? name : 'Nama User',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: scheme.onPrimaryContainer,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(role.isNotEmpty ? role : 'Posisi / Jabatan'),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          IconButton(
-            onPressed: null, // TODO: quick edit / ubah avatar
-            icon: Icon(
-              Icons.camera_alt_outlined,
-              color: scheme.onPrimaryContainer,
-            ),
-            tooltip: 'Ubah Foto',
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Avatar extends StatelessWidget {
-  final String name;
-  const _Avatar({required this.name});
-
-  String _initials(String n) {
-    final parts = n
-        .trim()
-        .split(RegExp(r'\s+'))
-        .where((e) => e.isNotEmpty)
-        .toList();
-    if (parts.isEmpty) return '?';
-    if (parts.length == 1) {
-      return parts.first.characters.take(2).toString().toUpperCase();
-    }
-    return (parts.first.characters.take(1).toString() +
-            parts.last.characters.take(1).toString())
-        .toUpperCase();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return CircleAvatar(
-      radius: 32,
-      backgroundColor: scheme.onPrimaryContainer.withOpacity(0.15),
-      child: Text(
-        _initials(name),
-        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-          color: scheme.onPrimaryContainer,
-          fontWeight: FontWeight.bold,
+            const SizedBox(height: 16),
+            _buildInfoRow('Name', _currentUser?.name ?? 'N/A'),
+            _buildInfoRow('Email', _currentUser?.email ?? 'N/A'),
+          ],
         ),
       ),
     );
   }
-}
 
-class _SectionTitle extends StatelessWidget {
-  final String text;
-  const _SectionTitle(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Text(
-        text,
-        style: Theme.of(
-          context,
-        ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-      ),
-    );
-  }
-}
-
-class _InfoTile extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-
-  const _InfoTile({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return ListTile(
-      leading: Icon(icon, color: scheme.primary),
-      title: Text(label),
-      subtitle: Text(value.isNotEmpty ? value : '—'),
-      dense: true,
-      visualDensity: VisualDensity.compact,
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  final String message;
-  final VoidCallback onLogin;
-
-  const _EmptyState({required this.message, required this.onLogin});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
+  Widget _buildEmployeeInfoCard() {
+    final employee = _currentUser!.employee!;
+    return Card(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(16),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(
-              Icons.person_off_outlined,
-              size: 64,
-              color: Colors.redAccent,
+            Text(
+              'Employee Information',
+              style: Theme.of(context).textTheme.titleLarge,
             ),
+            const SizedBox(height: 16),
+            //_buildInfoRow('Employee ID', employee.id.toString()),
+            _buildInfoRow('Emp. Number', employee.empno),
+            _buildInfoRow('Full Name', employee.fullname),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmployeeDetailsCard() {
+    final employee = _currentUser!.employee!;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Employee Details',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 16),
+            _buildInfoRow('City', employee.city?.name ?? 'Not set'),
+            _buildInfoRow('Gender', employee.gender?.name ?? 'Not set'),
+            _buildInfoRow(
+              'Marital Status',
+              employee.maritalStatus?.name ?? 'Not set',
+            ),
+            _buildInfoRow(
+              'Nationality',
+              employee.nationality?.name ?? 'Not set',
+            ),
+            _buildInfoRow('Religion', employee.religion?.name ?? 'Not set'),
+            if (employee.createdAt != null)
+              _buildInfoRow('Created At', employee.createdAt!),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNoEmployeeCard() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Icon(Icons.person_off, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
             Text(
-              message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.red),
+              'No Employee Record',
+              style: Theme.of(context).textTheme.titleMedium,
             ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: onLogin,
-              icon: const Icon(Icons.login),
-              label: const Text('Ke Halaman Login'),
+            const SizedBox(height: 8),
+            Text(
+              'Employee information has not been set up for this user.',
+              style: Theme.of(context).textTheme.bodyMedium,
+              textAlign: TextAlign.center,
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              '$label:',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+            ),
+          ),
+          Expanded(
+            child: Text(value, style: Theme.of(context).textTheme.bodyMedium),
+          ),
+        ],
       ),
     );
   }

@@ -1,12 +1,6 @@
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
-import '../models/user_model.dart';
-import 'halaman_produk.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import 'dart:async';
+import 'dashboard_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({Key? key}) : super(key: key);
@@ -17,8 +11,10 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
-  final _usernameController = TextEditingController();
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _authService = AuthService();
+
   bool _isLoading = false;
   bool _obscureText = true;
 
@@ -28,62 +24,43 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => _isLoading = true);
 
     try {
-      // Debug print
-      print('Attempting to connect to API...');
-      print('Login attempt with:'); // Debug print
-      print('Username: ${_usernameController.text}'); // Debug print
-      //print('API URL: dotenv.env['API_URL']!/login.php'); // Debug print
-      print('API URL: ${dotenv.env['API_URL']}/login.php');
+      final result = await _authService.login(
+        _emailController.text.trim(),
+        _passwordController.text,
+      );
 
-      final response = await http
-          .post(
-            //Uri.parse('dotenv.env['API_URL']!/login.php'),
-            Uri.parse('${dotenv.env['API_URL']}/login.php'),
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
-            body: jsonEncode({
-              'name': _usernameController.text,
-              'password': _passwordController.text,
-            }),
-          )
-          .timeout(
-            const Duration(seconds: 10), // Add timeout
-            onTimeout: () {
-              throw TimeoutException('Connection timeout');
-            },
-          );
-      // Debug prints
-      print('Response headers: ${response.headers}'); // Debug print
-      print('Response status: ${response.statusCode}');
-      print('Response body: ${response.body}');
+      if (!mounted) return;
 
-      final data = jsonDecode(response.body);
-
-      if (data['success']) {
-        // Save user data
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('user', jsonEncode(data['user']));
-
-        if (!mounted) return;
-
+      if (result.success) {
+        // Login berhasil, navigate ke dashboard
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const HalamanProduk()),
+          MaterialPageRoute(builder: (_) => const DashboardPage()),
         );
       } else {
-        if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(data['message'])));
+        // Login gagal, tampilkan pesan error
+        _showSnackBar(result.message);
       }
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Connection error')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  void _showSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
   }
 
   @override
@@ -97,33 +74,56 @@ class _LoginPageState extends State<LoginPage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                // App Logo/Title
+                Icon(
+                  Icons.business,
+                  size: 80,
+                  color: Theme.of(context).primaryColor,
+                ),
+                const SizedBox(height: 16),
                 Text(
                   'HRIS DGE',
-                  style: Theme.of(context).textTheme.headlineMedium,
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).primaryColor,
+                  ),
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 48),
+
+                // Email Field
                 TextFormField(
-                  controller: _usernameController,
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.next,
                   decoration: InputDecoration(
-                    labelText: 'Username',
+                    labelText: 'Email',
+                    hintText: 'Enter your email',
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    prefixIcon: const Icon(Icons.person),
+                    prefixIcon: const Icon(Icons.email),
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
-                      return 'Please enter username';
+                      return 'Please enter your email';
+                    }
+                    if (!value.contains('@')) {
+                      return 'Please enter a valid email';
                     }
                     return null;
                   },
                 ),
                 const SizedBox(height: 16),
+
+                // Password Field
                 TextFormField(
                   controller: _passwordController,
                   obscureText: _obscureText,
+                  textInputAction: TextInputAction.done,
+                  onFieldSubmitted: (_) => _login(),
                   decoration: InputDecoration(
                     labelText: 'Password',
+                    hintText: 'Enter your password',
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -139,12 +139,17 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
-                      return 'Please enter password';
+                      return 'Please enter your password';
+                    }
+                    if (value.length < 6) {
+                      return 'Password must be at least 6 characters';
                     }
                     return null;
                   },
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 32),
+
+                // Login Button
                 SizedBox(
                   width: double.infinity,
                   height: 48,
@@ -156,10 +161,35 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                     ),
                     child: _isLoading
-                        ? const CircularProgressIndicator()
-                        : const Text('Login'),
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text(
+                            'Login',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                   ),
                 ),
+
+                const SizedBox(height: 16),
+
+                // Development info (remove in production)
+                if (const bool.fromEnvironment('dart.vm.product') == false)
+                  Card(
+                    color: Colors.grey[100],
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Text(
+                        'Dev Mode: API URL = ${AuthService.baseUrl}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
