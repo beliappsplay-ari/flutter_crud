@@ -65,6 +65,9 @@ class AuthService {
   // Login method
   Future<AuthResult> login(String email, String password) async {
     try {
+      print('=== LOGIN DEBUG ===');
+      print('Calling API: $baseUrl/login');
+
       final response = await http
           .post(
             Uri.parse('$baseUrl/login'),
@@ -73,6 +76,9 @@ class AuthService {
           )
           .timeout(const Duration(seconds: 30));
 
+      print('Login Response status: ${response.statusCode}');
+      print('Login Response body: ${response.body}');
+
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200 && data['success'] == true) {
@@ -80,6 +86,9 @@ class AuthService {
         final token =
             data['data']['token'] ?? data['token']; // Support kedua format
         final userData = data['data']['user'] ?? data['user'];
+
+        print('Token received: ${token?.substring(0, 20)}...');
+        print('User data: $userData');
 
         final user = User.fromJson(userData);
 
@@ -95,6 +104,7 @@ class AuthService {
     } on TimeoutException {
       return AuthResult.error('Connection timeout. Please try again.');
     } catch (e) {
+      print('Login error: $e');
       return AuthResult.error('Network error: $e');
     }
   }
@@ -124,29 +134,49 @@ class AuthService {
     }
   }
 
-  // Get current user dari server
+  // Get current user dari server - DENGAN DEBUG
   Future<AuthResult> getCurrentUser() async {
     try {
+      print('=== GET CURRENT USER DEBUG ===');
+      print('Calling API: $baseUrl/me');
+
+      final token = await getToken();
+      print('Token available: ${token != null}');
+      if (token != null) {
+        print('Token preview: ${token.substring(0, 20)}...');
+      }
+
+      final headers = await _authenticatedHeaders;
+      print('Headers: $headers');
+
       final response = await http
-          .get(Uri.parse('$baseUrl/me'), headers: await _authenticatedHeaders)
+          .get(Uri.parse('$baseUrl/me'), headers: headers)
           .timeout(const Duration(seconds: 15));
+
+      print('Response status: ${response.statusCode}');
+      print('Response body: ${response.body}');
 
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200 && data['success'] == true) {
         final user = User.fromJson(data['data']);
         await saveUser(user); // Update cached user data
+        print('User loaded successfully: ${user.name}');
         return AuthResult.success(user: user);
       } else if (response.statusCode == 401) {
         // Token invalid, logout user
+        print('Token invalid, logging out');
         await removeToken();
         return AuthResult.error('Session expired. Please login again.');
       } else {
+        print('API error: ${data['message']}');
         return AuthResult.error(data['message'] ?? 'Failed to get user data');
       }
     } on TimeoutException {
+      print('Timeout error');
       return AuthResult.error('Connection timeout');
     } catch (e) {
+      print('Network error: $e');
       return AuthResult.error('Network error: $e');
     }
   }

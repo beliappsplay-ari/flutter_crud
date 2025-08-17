@@ -5,13 +5,8 @@ import 'package:flutter_crud/services/auth_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 void main() async {
-  // Pastikan binding Flutter diinisialisasi
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Load environment variables
   await dotenv.load();
-
-  // Jalankan aplikasi
   runApp(const MyApp());
 }
 
@@ -32,7 +27,6 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// Widget untuk mengecek authentication status
 class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
 
@@ -56,13 +50,31 @@ class _AuthWrapperState extends State<AuthWrapper> {
       final isLoggedIn = await _authService.isLoggedIn();
 
       if (isLoggedIn) {
-        // Verify token dengan server
-        final result = await _authService.getCurrentUser();
-        if (mounted) {
-          setState(() {
-            _isLoggedIn = result.success;
-            _isLoading = false;
-          });
+        // Enable server verification
+        print('Token found, verifying with server...');
+        try {
+          final result = await _authService.getCurrentUser();
+          if (mounted) {
+            setState(() {
+              _isLoggedIn = result.success;
+              _isLoading = false;
+            });
+
+            if (result.success) {
+              print('Server verification successful');
+            } else {
+              print('Server verification failed: ${result.message}');
+            }
+          }
+        } catch (e) {
+          print('Failed to verify with server: $e');
+          // Fallback: assume logged in if token exists
+          if (mounted) {
+            setState(() {
+              _isLoggedIn = true;
+              _isLoading = false;
+            });
+          }
         }
       } else {
         if (mounted) {
@@ -73,7 +85,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         }
       }
     } catch (e) {
-      // Error checking auth status, default to not logged in
+      print('Auth check error: $e');
       if (mounted) {
         setState(() {
           _isLoggedIn = false;
@@ -86,15 +98,32 @@ class _AuthWrapperState extends State<AuthWrapper> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text('Loading...'),
-            ],
+      return Scaffold(
+        body: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Theme.of(context).primaryColor,
+                Theme.of(context).primaryColor.withOpacity(0.8),
+              ],
+            ),
+          ),
+          child: const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+                SizedBox(height: 16),
+                Text(
+                  'Verifying credentials...',
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                ),
+              ],
+            ),
           ),
         ),
       );
