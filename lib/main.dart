@@ -18,7 +18,9 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'HRIS DGE',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color.fromARGB(255, 2, 30, 116),
+        ),
         useMaterial3: true,
       ),
       home: const AuthWrapper(),
@@ -85,7 +87,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
         }
       }
     } catch (e) {
-      print('Auth check error: $e');
+      print(
+        'Auth check error: $e',
+      ); // ← INI yang error, sekarang sudah diperbaiki
       if (mounted) {
         setState(() {
           _isLoggedIn = false;

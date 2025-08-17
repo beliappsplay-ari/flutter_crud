@@ -17,12 +17,20 @@ class _DashboardPageState extends State<DashboardPage> {
   int _selectedIndex = 0; // Index halaman yang sedang aktif
 
   // Daftar halaman yang akan ditampilkan di Bottom Navigation Bar
-  final List<Widget> _pages = [
-    const DashboardHomePage(), // Ganti home page dengan dashboard dengan menu
-    const SalarySlipPage(), // Tambah salary slip page
-    const Center(child: Text('Settings Page')),
-    const UserProfilePage(),
-  ];
+  Widget _getPage(int index) {
+    switch (index) {
+      case 0:
+        return DashboardHomePage(onNavigate: _onItemTapped);
+      case 1:
+        return const SalarySlipPage();
+      case 2:
+        return const Center(child: Text('Settings Page'));
+      case 3:
+        return const UserProfilePage();
+      default:
+        return DashboardHomePage(onNavigate: _onItemTapped);
+    }
+  }
 
   // Metode yang dipanggil saat item Bottom Navigation Bar ditekan
   void _onItemTapped(int index) {
@@ -89,6 +97,7 @@ class _DashboardPageState extends State<DashboardPage> {
       appBar: AppBar(
         title: const Text('HRIS DGE'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        //backgroundColor: Color(blue), // Replace with your primary color
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
@@ -97,7 +106,7 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
         ],
       ),
-      body: IndexedStack(index: _selectedIndex, children: _pages),
+      body: _getPage(_selectedIndex),
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
         items: const <BottomNavigationBarItem>[
@@ -126,7 +135,9 @@ class _DashboardPageState extends State<DashboardPage> {
 
 // Dashboard Home Page dengan menu grid
 class DashboardHomePage extends StatelessWidget {
-  const DashboardHomePage({super.key});
+  final Function(int)? onNavigate;
+
+  const DashboardHomePage({super.key, this.onNavigate});
 
   @override
   Widget build(BuildContext context) {
@@ -163,7 +174,7 @@ class DashboardHomePage extends StatelessWidget {
                 ),
                 SizedBox(height: 8),
                 Text(
-                  'HRIS - Digital Group Enterprise',
+                  'HRIS - DIAN GARAHA ELEKTRIKA',
                   style: TextStyle(color: Colors.white70, fontSize: 16),
                 ),
               ],
@@ -194,10 +205,10 @@ class DashboardHomePage extends StatelessWidget {
                   subtitle: 'Manage employee data',
                   color: Colors.blue,
                   onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const HalamanProduk(),
+                    // Navigate to employees page (for now, show message)
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Employees feature - coming soon!'),
                       ),
                     );
                   },
@@ -209,12 +220,8 @@ class DashboardHomePage extends StatelessWidget {
                   subtitle: 'View and download',
                   color: Colors.green,
                   onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const SalarySlipPage(),
-                      ),
-                    );
+                    // Switch to salary slip tab (index 1)
+                    onNavigate?.call(1);
                   },
                 ),
                 _buildMenuCard(

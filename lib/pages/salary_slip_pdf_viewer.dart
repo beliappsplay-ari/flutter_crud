@@ -72,10 +72,14 @@ class _SalarySlipPDFViewerState extends State<SalarySlipPDFViewer> {
           )
           .timeout(const Duration(seconds: 30));
 
+      print('PDF Load response status: ${response.statusCode}');
+
       if (response.statusCode == 200) {
         final dir = await getTemporaryDirectory();
         final file = File('${dir.path}/salary_slip_${widget.salarySlipId}.pdf');
         await file.writeAsBytes(response.bodyBytes);
+
+        print('PDF saved to: ${file.path}');
 
         setState(() {
           localPath = file.path;
@@ -96,22 +100,73 @@ class _SalarySlipPDFViewerState extends State<SalarySlipPDFViewer> {
 
   Future<void> downloadPDF() async {
     try {
-      // Check and request storage permission for Android
+      print('Starting PDF download...');
+
+      // Show loading snackbar
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              ),
+              SizedBox(width: 12),
+              Text('Downloading PDF...'),
+            ],
+          ),
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+      // For Android, request multiple permissions
       if (Platform.isAndroid) {
-        var status = await Permission.storage.status;
-        if (!status.isGranted) {
-          status = await Permission.storage.request();
-          if (!status.isGranted) {
-            _showSnackBar(
-              'Storage permission is required to download PDF',
-              Colors.red,
-            );
-            return;
-          }
+        print('Requesting Android permissions...');
+
+        // Request both storage permissions
+        Map<Permission, PermissionStatus> statuses = await [
+          Permission.storage,
+          Permission.manageExternalStorage,
+        ].request();
+
+        print('Permission statuses: $statuses');
+
+        // Check if we have any storage permission
+        bool hasStoragePermission =
+            statuses[Permission.storage]?.isGranted == true ||
+            statuses[Permission.manageExternalStorage]?.isGranted == true;
+
+        if (!hasStoragePermission) {
+          // Show dialog to explain and redirect to settings
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Storage Permission Required'),
+              content: const Text(
+                'This app needs storage permission to download PDF files. Please grant storage permission in app settings.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    openAppSettings();
+                  },
+                  child: const Text('Open Settings'),
+                ),
+              ],
+            ),
+          );
+          return;
         }
       }
-
-      setState(() => isLoading = true);
 
       final token = await getToken();
       if (token == null) {
@@ -121,42 +176,103 @@ class _SalarySlipPDFViewerState extends State<SalarySlipPDFViewer> {
       final apiUrl = dotenv.env['API_URL'] ?? 'http://10.0.2.2:8000/api';
       final url = '$apiUrl/salary-slips/${widget.salarySlipId}/pdf';
 
-      final response = await http.get(
-        Uri.parse(url),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/pdf',
-        },
-      );
+      print('Downloading PDF from: $url');
+
+      final response = await http
+          .get(
+            Uri.parse(url),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Accept': 'application/pdf',
+            },
+          )
+          .timeout(const Duration(seconds: 30));
+
+      print('Download response status: ${response.statusCode}');
+      print('Response content length: ${response.bodyBytes.length} bytes');
 
       if (response.statusCode == 200) {
-        // Get downloads directory
-        Directory? downloadsDir;
+        // For emulator, save to easily accessible location
+        Directory? saveDir;
+        String? finalPath;
+
         if (Platform.isAndroid) {
-          downloadsDir = Directory('/storage/emulated/0/Download');
-          if (!await downloadsDir.exists()) {
-            downloadsDir = await getExternalStorageDirectory();
+          // Try public Downloads directory first (best for emulator)
+          List<String> downloadPaths = [
+            '/storage/emulated/0/Download',
+            '/storage/emulated/0/Downloads',
+          ];
+
+          for (String path in downloadPaths) {
+            Directory testDir = Directory(path);
+            if (await testDir.exists()) {
+              try {
+                // Test write access
+                final testFile = File('$path/test_write.tmp');
+                await testFile.writeAsString('test');
+                await testFile.delete();
+
+                finalPath = path;
+                print('Using public downloads: $path');
+                break;
+              } catch (e) {
+                print('No write access to $path: $e');
+                continue;
+              }
+            }
+          }
+
+          // Fallback to external app directory
+          if (finalPath == null) {
+            saveDir = await getExternalStorageDirectory();
+            if (saveDir != null) {
+              finalPath = '${saveDir.path}/Download';
+              await Directory(finalPath).create(recursive: true);
+              print('Using app external directory: $finalPath');
+            }
           }
         } else {
-          downloadsDir = await getApplicationDocumentsDirectory();
+          saveDir = await getApplicationDocumentsDirectory();
+          finalPath = saveDir.path;
+          print('Using documents directory: $finalPath');
         }
 
-        final fileName =
-            'salary_slip_${widget.employeeName}_${widget.period}.pdf'
-                .replaceAll(' ', '_')
-                .replaceAll('/', '-');
+        if (finalPath == null) {
+          throw Exception('Could not access storage directory');
+        }
 
-        final file = File('${downloadsDir!.path}/$fileName');
+        // Create filename with timestamp for uniqueness
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final fileName =
+            'salary_slip_${widget.employeeName}_${widget.period}_$timestamp.pdf'
+                .replaceAll(' ', '_')
+                .replaceAll('/', '-')
+                .replaceAll(':', '')
+                .replaceAll('\\', '');
+
+        print('Saving as: $fileName');
+
+        final file = File('$finalPath/$fileName');
         await file.writeAsBytes(response.bodyBytes);
 
-        setState(() => isLoading = false);
+        print('PDF saved to: ${file.path}');
+        print('File exists: ${await file.exists()}');
+        print('File size: ${await file.length()} bytes');
 
-        _showSnackBar('PDF downloaded successfully!', Colors.green);
+        // Show path information
+        String displayPath = finalPath.contains('/Android/data/')
+            ? 'App folder: $fileName'
+            : 'Downloads folder: $fileName';
+
+        _showSnackBar(
+          'PDF downloaded successfully!\n$displayPath',
+          Colors.green,
+        );
       } else {
-        throw Exception('Failed to download PDF: ${response.statusCode}');
+        throw Exception('Failed to download PDF: HTTP ${response.statusCode}');
       }
     } catch (e) {
-      setState(() => isLoading = false);
+      print('Download error: $e');
       _showSnackBar('Download failed: ${e.toString()}', Colors.red);
     }
   }
@@ -187,8 +303,7 @@ class _SalarySlipPDFViewerState extends State<SalarySlipPDFViewer> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Salary Slip'),
-        subtitle: Text('${widget.employeeName} - ${widget.period}'),
+        title: Text('Salary Slip - ${widget.employeeName}'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
           if (!isLoading && localPath != null) ...[
@@ -208,6 +323,9 @@ class _SalarySlipPDFViewerState extends State<SalarySlipPDFViewer> {
                   case 'refresh':
                     loadPDF();
                     break;
+                  case 'zoom_fit':
+                    // PDF viewer will handle zoom
+                    break;
                 }
               },
               itemBuilder: (context) => [
@@ -221,13 +339,76 @@ class _SalarySlipPDFViewerState extends State<SalarySlipPDFViewer> {
                     ],
                   ),
                 ),
+                const PopupMenuItem(
+                  value: 'zoom_fit',
+                  child: Row(
+                    children: [
+                      Icon(Icons.zoom_out_map),
+                      SizedBox(width: 8),
+                      Text('Fit to Screen'),
+                    ],
+                  ),
+                ),
               ],
             ),
           ],
         ],
       ),
       body: _buildBody(),
-      bottomNavigationBar: _buildBottomBar(),
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildBottomBar(),
+          BottomNavigationBar(
+            type: BottomNavigationBarType.fixed,
+            items: const <BottomNavigationBarItem>[
+              BottomNavigationBarItem(
+                icon: Icon(Icons.dashboard),
+                label: 'Dashboard',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.receipt_long),
+                label: 'Salary Slips',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.settings),
+                label: 'Settings',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.person),
+                label: 'Profile',
+              ),
+            ],
+            currentIndex: 1, // Salary Slips is selected
+            selectedItemColor: Theme.of(context).colorScheme.primary,
+            unselectedItemColor: Colors.grey,
+            onTap: (int index) {
+              switch (index) {
+                case 0:
+                  // Navigate back to Dashboard
+                  Navigator.of(context).pop();
+                  break;
+                case 1:
+                  // Navigate back to Salary Slips list
+                  Navigator.of(context).pop();
+                  break;
+                case 2:
+                  // Settings
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Settings page coming soon!')),
+                  );
+                  break;
+                case 3:
+                  // Profile
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Profile page coming soon!')),
+                  );
+                  break;
+              }
+            },
+          ),
+        ],
+      ),
     );
   }
 
@@ -290,24 +471,29 @@ class _SalarySlipPDFViewerState extends State<SalarySlipPDFViewer> {
         setState(() {
           totalPages = pages ?? 0;
         });
+        print('PDF rendered with $totalPages pages');
       },
       onError: (error) {
+        print('PDF Error: $error');
         setState(() {
           hasError = true;
           errorMessage = error.toString();
         });
       },
       onPageError: (page, error) {
+        print('PDF Page Error - Page $page: $error');
         _showSnackBar('Error on page $page: $error', Colors.red);
       },
       onViewCreated: (PDFViewController controller) {
         pdfController = controller;
+        print('PDF View Controller created');
       },
       onPageChanged: (int? page, int? total) {
         setState(() {
           currentPage = page ?? 0;
           totalPages = total ?? 0;
         });
+        print('Page changed to: ${currentPage + 1}/$totalPages');
       },
     );
   }
@@ -330,45 +516,39 @@ class _SalarySlipPDFViewerState extends State<SalarySlipPDFViewer> {
         ],
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Row(
-            children: [
-              IconButton(
-                onPressed: currentPage > 0
-                    ? () async {
-                        await pdfController?.setPage(currentPage - 1);
-                      }
-                    : null,
-                icon: const Icon(Icons.navigate_before),
-              ),
-              Text(
-                '${currentPage + 1} / $totalPages',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              IconButton(
-                onPressed: currentPage < totalPages - 1
-                    ? () async {
-                        await pdfController?.setPage(currentPage + 1);
-                      }
-                    : null,
-                icon: const Icon(Icons.navigate_next),
-              ),
-            ],
+          // Page Navigation Only
+          IconButton(
+            onPressed: currentPage > 0
+                ? () async {
+                    await pdfController?.setPage(currentPage - 1);
+                  }
+                : null,
+            icon: const Icon(Icons.navigate_before),
+            tooltip: 'Previous Page',
           ),
           Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: Colors.green,
+              color: Theme.of(context).primaryColor.withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: TextButton.icon(
-              onPressed: downloadPDF,
-              icon: const Icon(Icons.download, color: Colors.white),
-              label: const Text(
-                'Download',
-                style: TextStyle(color: Colors.white),
-              ),
+            child: Text(
+              '${currentPage + 1} / $totalPages',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
+          ),
+          IconButton(
+            onPressed: currentPage < totalPages - 1
+                ? () async {
+                    await pdfController?.setPage(currentPage + 1);
+                  }
+                : null,
+            icon: const Icon(Icons.navigate_next),
+            tooltip: 'Next Page',
           ),
         ],
       ),

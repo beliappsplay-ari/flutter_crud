@@ -3,6 +3,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'salary_slip_pdf_viewer.dart';
 
 class SalarySlipPage extends StatefulWidget {
   const SalarySlipPage({super.key});
@@ -12,7 +13,10 @@ class SalarySlipPage extends StatefulWidget {
 }
 
 class _SalarySlipPageState extends State<SalarySlipPage> {
-  List<dynamic> salarySlips = [];
+  List<dynamic> allSalarySlips = [];
+  List<String> availablePeriods = [];
+  String? selectedPeriod;
+  Map<String, dynamic>? currentSlip;
   bool isLoading = true;
   String? errorMessage;
 
@@ -22,7 +26,7 @@ class _SalarySlipPageState extends State<SalarySlipPage> {
     loadSalarySlips();
   }
 
-  // Get token dari SharedPreferences (sama seperti di halaman_produk.dart)
+  // Get token dari SharedPreferences
   Future<String?> getToken() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('token');
@@ -62,14 +66,28 @@ class _SalarySlipPageState extends State<SalarySlipPage> {
           .timeout(const Duration(seconds: 10));
 
       print('Response status: ${response.statusCode}');
-      print('Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
 
         if (data['success'] == true) {
           setState(() {
-            salarySlips = data['data'] ?? [];
+            allSalarySlips = data['data'] ?? [];
+
+            // Extract unique periods and sort them descending
+            availablePeriods = allSalarySlips
+                .map((slip) => slip['period'].toString())
+                .toSet()
+                .toList();
+
+            availablePeriods.sort((a, b) => b.compareTo(a)); // Latest first
+
+            // Auto-select the latest period if available
+            if (availablePeriods.isNotEmpty) {
+              selectedPeriod = availablePeriods.first;
+              _updateCurrentSlip();
+            }
+
             isLoading = false;
           });
         } else {
@@ -96,6 +114,45 @@ class _SalarySlipPageState extends State<SalarySlipPage> {
         isLoading = false;
       });
     }
+  }
+
+  void _updateCurrentSlip() {
+    if (selectedPeriod != null) {
+      currentSlip = allSalarySlips.firstWhere(
+        (slip) => slip['period'] == selectedPeriod,
+        orElse: () => null,
+      );
+    } else {
+      currentSlip = null;
+    }
+  }
+
+  String _formatPeriod(String period) {
+    if (period.length == 6) {
+      final year = period.substring(0, 4);
+      final month = period.substring(4, 6);
+
+      const months = [
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December',
+      ];
+
+      final monthIndex = int.tryParse(month);
+      if (monthIndex != null && monthIndex >= 1 && monthIndex <= 12) {
+        return '${months[monthIndex - 1]} $year';
+      }
+    }
+    return period;
   }
 
   @override
@@ -160,7 +217,7 @@ class _SalarySlipPageState extends State<SalarySlipPage> {
       );
     }
 
-    if (salarySlips.isEmpty) {
+    if (availablePeriods.isEmpty) {
       return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -180,140 +237,289 @@ class _SalarySlipPageState extends State<SalarySlipPage> {
 
     return RefreshIndicator(
       onRefresh: loadSalarySlips,
-      child: ListView.builder(
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
-        itemCount: salarySlips.length,
-        itemBuilder: (context, index) {
-          final slip = salarySlips[index];
-          return Card(
-            margin: const EdgeInsets.only(bottom: 12),
-            elevation: 2,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Theme.of(
-                            context,
-                          ).primaryColor.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(
-                          Icons.receipt_long,
-                          color: Theme.of(context).primaryColor,
-                          size: 24,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              slip['period'] ?? 'Unknown Period',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              slip['employee']?['fullname'] ??
-                                  slip['employee_name'] ??
-                                  'Unknown Employee',
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 14,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Period Selector
+            _buildPeriodSelector(),
 
-                  // Info Cards
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildInfoCard(
-                          'Basic Salary',
-                          _formatCurrency(slip['basic_salary']),
-                          Colors.blue,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _buildInfoCard(
-                          'Net Salary',
-                          _formatCurrency(slip['net_salary']),
-                          Colors.green,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
+            const SizedBox(height: 24),
 
-                  // Action Buttons
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () => _viewDetails(slip),
-                          icon: const Icon(Icons.visibility),
-                          label: const Text('View Details'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () => _downloadPDF(slip),
-                          icon: const Icon(Icons.download),
-                          label: const Text('Download PDF'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
+            // Salary Slip Card
+            if (currentSlip != null) _buildSalarySlipCard(currentSlip!),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildInfoCard(String label, String value, Color color) {
+  Widget _buildPeriodSelector() {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.calendar_month, color: Colors.blue),
+                SizedBox(width: 8),
+                Text(
+                  'Select Period',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey[300]!),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: selectedPeriod,
+                  isExpanded: true,
+                  hint: const Text('Choose a period'),
+                  items: availablePeriods.map((period) {
+                    return DropdownMenuItem<String>(
+                      value: period,
+                      child: Text(_formatPeriod(period)),
+                    );
+                  }).toList(),
+                  onChanged: (String? newValue) {
+                    setState(() {
+                      selectedPeriod = newValue;
+                      _updateCurrentSlip();
+                    });
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSalarySlipCard(Map<String, dynamic> slip) {
+    return Card(
+      elevation: 4,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).primaryColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    Icons.receipt_long,
+                    color: Theme.of(context).primaryColor,
+                    size: 28,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _formatPeriod(slip['period'] ?? 'Unknown Period'),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 20,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        slip['employee']?['fullname'] ??
+                            slip['employee_name'] ??
+                            'Unknown Employee',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 16),
+                      ),
+                      Text(
+                        'Employee No: ${slip['empno'] ?? 'N/A'}',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 24),
+
+            // Salary Summary Cards
+            Row(
+              children: [
+                Expanded(
+                  child: _buildSummaryCard(
+                    'Basic Salary',
+                    _formatCurrency(slip['basic_salary']),
+                    Colors.blue,
+                    Icons.account_balance_wallet,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildSummaryCard(
+                    'Total Income',
+                    _formatCurrency(slip['total_income']),
+                    Colors.green,
+                    Icons.trending_up,
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 12),
+
+            Row(
+              children: [
+                Expanded(
+                  child: _buildSummaryCard(
+                    'Allowances',
+                    _formatCurrency(slip['allowances']),
+                    Colors.orange,
+                    Icons.add_circle_outline,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildSummaryCard(
+                    'Deductions',
+                    _formatCurrency(slip['deductions']),
+                    Colors.red,
+                    Icons.remove_circle_outline,
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 20),
+
+            // Net Salary (Highlighted)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.green[600]!, Colors.green[500]!],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  const Text(
+                    'NET SALARY',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _formatCurrency(slip['net_salary']),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 24,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
+            // Action Buttons
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _viewDetails(slip),
+                    icon: const Icon(Icons.info_outline),
+                    label: const Text('View Details'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _viewPDF(slip),
+                    icon: const Icon(Icons.picture_as_pdf),
+                    label: const Text('View PDF'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSummaryCard(
+    String label,
+    String value,
+    Color color,
+    IconData icon,
+  ) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: color.withOpacity(0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
+          Row(
+            children: [
+              Icon(icon, color: color, size: 16),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
           Text(
             value,
             style: TextStyle(
               color: color,
-              fontSize: 16,
+              fontSize: 14,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -331,49 +537,88 @@ class _SalarySlipPageState extends State<SalarySlipPage> {
     return 'Rp ${value.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}';
   }
 
+  void _viewPDF(Map<String, dynamic> slip) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SalarySlipPDFViewer(
+          salarySlipId: slip['id'],
+          employeeName:
+              slip['employee']?['fullname'] ??
+              slip['employee_name'] ??
+              'Unknown',
+          period: slip['period'] ?? 'Unknown',
+        ),
+      ),
+    );
+  }
+
   void _viewDetails(Map<String, dynamic> slip) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Salary Slip Details'),
+        title: Text(
+          'Salary Slip Details - ${_formatPeriod(slip['period'] ?? '')}',
+        ),
         content: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              _buildDetailRow('Period', slip['period'] ?? 'N/A'),
-              _buildDetailRow(
-                'Employee',
-                slip['employee']?['fullname'] ?? slip['employee_name'] ?? 'N/A',
-              ),
-              _buildDetailRow(
-                'Employee No',
-                slip['employee']?['empno']?.toString() ?? 'N/A',
-              ),
+              _buildDetailSection('Employee Information', [
+                _buildDetailRow(
+                  'Employee Name',
+                  slip['employee']?['fullname'] ??
+                      slip['employee_name'] ??
+                      'N/A',
+                ),
+                _buildDetailRow(
+                  'Employee No',
+                  slip['empno']?.toString() ?? 'N/A',
+                ),
+                _buildDetailRow(
+                  'Period',
+                  _formatPeriod(slip['period'] ?? 'N/A'),
+                ),
+              ]),
+
               const SizedBox(height: 16),
-              const Text(
-                'Salary Details:',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              _buildDetailRow(
-                'Basic Salary',
-                _formatCurrency(slip['basic_salary']),
-              ),
-              _buildDetailRow(
-                'Allowances',
-                _formatCurrency(slip['allowances']),
-              ),
-              _buildDetailRow(
-                'Deductions',
-                _formatCurrency(slip['deductions']),
-              ),
-              const Divider(),
-              _buildDetailRow(
-                'Net Salary',
-                _formatCurrency(slip['net_salary']),
-                isTotal: true,
-              ),
+
+              if (slip['details'] != null) ...[
+                _buildDetailSection(
+                  'Income Breakdown',
+                  _buildIncomeRows(slip['details']['income']),
+                ),
+
+                const SizedBox(height: 16),
+
+                _buildDetailSection(
+                  'Deduction Breakdown',
+                  _buildDeductionRows(slip['details']['deductions']),
+                ),
+
+                const SizedBox(height: 16),
+              ],
+
+              _buildDetailSection('Summary', [
+                _buildDetailRow(
+                  'Total Income',
+                  _formatCurrency(slip['total_income']),
+                  isTotal: true,
+                ),
+                _buildDetailRow(
+                  'Total Deductions',
+                  _formatCurrency(slip['deductions']),
+                  isTotal: true,
+                ),
+                const Divider(),
+                _buildDetailRow(
+                  'NET SALARY',
+                  _formatCurrency(slip['net_salary']),
+                  isTotal: true,
+                  isNetSalary: true,
+                ),
+              ]),
             ],
           ),
         ),
@@ -385,102 +630,221 @@ class _SalarySlipPageState extends State<SalarySlipPage> {
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              _downloadPDF(slip);
+              _viewPDF(slip);
             },
-            child: const Text('Download PDF'),
+            child: const Text('View PDF'),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildDetailRow(String label, String value, {bool isTotal = false}) {
+  List<Widget> _buildIncomeRows(Map<String, dynamic> income) {
+    List<Widget> rows = [];
+
+    // Helper function to check if value is greater than 0
+    bool hasValue(dynamic value) {
+      if (value == null) return false;
+      final numValue = value is String
+          ? double.tryParse(value) ?? 0
+          : value.toDouble();
+      return numValue > 0;
+    }
+
+    // Add income items only if they have value > 0
+    if (hasValue(income['basic_salary'])) {
+      rows.add(
+        _buildDetailRow(
+          'Basic Salary',
+          _formatCurrency(income['basic_salary']),
+        ),
+      );
+    }
+
+    if (hasValue(income['transport'])) {
+      rows.add(
+        _buildDetailRow(
+          'Transport Allowance',
+          _formatCurrency(income['transport']),
+        ),
+      );
+    }
+
+    if (hasValue(income['meal'])) {
+      rows.add(
+        _buildDetailRow('Meal Allowance', _formatCurrency(income['meal'])),
+      );
+    }
+
+    if (hasValue(income['overtime'])) {
+      rows.add(
+        _buildDetailRow('Overtime', _formatCurrency(income['overtime'])),
+      );
+    }
+
+    if (hasValue(income['other_income'])) {
+      rows.add(
+        _buildDetailRow(
+          'Other Income',
+          _formatCurrency(income['other_income']),
+        ),
+      );
+    }
+
+    if (hasValue(income['medical'])) {
+      rows.add(
+        _buildDetailRow(
+          'Medical Allowance',
+          _formatCurrency(income['medical']),
+        ),
+      );
+    }
+
+    if (hasValue(income['bpjs_company'])) {
+      rows.add(
+        _buildDetailRow(
+          'BPJS Company',
+          _formatCurrency(income['bpjs_company']),
+        ),
+      );
+    }
+
+    // If no income items, show at least basic salary
+    if (rows.isEmpty) {
+      rows.add(
+        _buildDetailRow(
+          'Basic Salary',
+          _formatCurrency(income['basic_salary'] ?? 0),
+        ),
+      );
+    }
+
+    return rows;
+  }
+
+  List<Widget> _buildDeductionRows(Map<String, dynamic> deductions) {
+    List<Widget> rows = [];
+
+    // Helper function to check if value is greater than 0
+    bool hasValue(dynamic value) {
+      if (value == null) return false;
+      final numValue = value is String
+          ? double.tryParse(value) ?? 0
+          : value.toDouble();
+      return numValue > 0;
+    }
+
+    // Add deduction items only if they have value > 0
+    if (hasValue(deductions['tax'])) {
+      rows.add(
+        _buildDetailRow('Income Tax', _formatCurrency(deductions['tax'])),
+      );
+    }
+
+    if (hasValue(deductions['jkm'])) {
+      rows.add(_buildDetailRow('JKM', _formatCurrency(deductions['jkm'])));
+    }
+
+    if (hasValue(deductions['jht'])) {
+      rows.add(_buildDetailRow('JHT', _formatCurrency(deductions['jht'])));
+    }
+
+    if (hasValue(deductions['bpjs_employee'])) {
+      rows.add(
+        _buildDetailRow(
+          'BPJS Employee',
+          _formatCurrency(deductions['bpjs_employee']),
+        ),
+      );
+    }
+
+    if (hasValue(deductions['personal_advance'])) {
+      rows.add(
+        _buildDetailRow(
+          'Personal Advance',
+          _formatCurrency(deductions['personal_advance']),
+        ),
+      );
+    }
+
+    if (hasValue(deductions['koperasi'])) {
+      rows.add(
+        _buildDetailRow('Koperasi', _formatCurrency(deductions['koperasi'])),
+      );
+    }
+
+    if (hasValue(deductions['loan_car'])) {
+      rows.add(
+        _buildDetailRow('Loan Car', _formatCurrency(deductions['loan_car'])),
+      );
+    }
+
+    // If no deductions, show a message
+    if (rows.isEmpty) {
+      rows.add(
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 8),
+          child: Text(
+            'No deductions for this period',
+            style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey),
+          ),
+        ),
+      );
+    }
+
+    return rows;
+  }
+
+  Widget _buildDetailSection(String title, List<Widget> children) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+            color: Colors.blue,
+          ),
+        ),
+        const SizedBox(height: 8),
+        ...children,
+      ],
+    );
+  }
+
+  Widget _buildDetailRow(
+    String label,
+    String value, {
+    bool isTotal = false,
+    bool isNetSalary = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
+                color: isNetSalary ? Colors.green[700] : null,
+              ),
             ),
           ),
           Text(
             value,
             style: TextStyle(
               fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
-              color: isTotal ? Colors.green : null,
+              color: isNetSalary
+                  ? Colors.green[700]
+                  : (isTotal ? Colors.blue[700] : null),
             ),
           ),
         ],
       ),
     );
-  }
-
-  void _downloadPDF(Map<String, dynamic> slip) async {
-    try {
-      // Show loading dialog
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const AlertDialog(
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text('Downloading PDF...'),
-            ],
-          ),
-        ),
-      );
-
-      final token = await getToken();
-      if (token == null) {
-        Navigator.pop(context);
-        _showErrorSnackBar('Authentication token not found');
-        return;
-      }
-
-      final apiUrl = dotenv.env['API_URL'] ?? 'http://10.0.2.2:8000/api';
-      final url = '$apiUrl/salary-slips/${slip['id']}/pdf';
-
-      print('Downloading PDF from: $url');
-
-      final response = await http
-          .get(
-            Uri.parse(url),
-            headers: {
-              'Authorization': 'Bearer $token',
-              'Accept': 'application/pdf',
-            },
-          )
-          .timeout(const Duration(seconds: 30));
-
-      Navigator.pop(context); // Close loading dialog
-
-      print('PDF Download response status: ${response.statusCode}');
-
-      if (response.statusCode == 200) {
-        // For now, just show success message
-        // In production, you'd save the file to device storage
-        _showSuccessSnackBar(
-          'PDF downloaded successfully! (${response.bodyBytes.length} bytes)',
-        );
-
-        // TODO: Implement actual file saving
-        // final directory = await getApplicationDocumentsDirectory();
-        // final file = File('${directory.path}/salary_slip_${slip['id']}.pdf');
-        // await file.writeAsBytes(response.bodyBytes);
-      } else {
-        _showErrorSnackBar('Failed to download PDF: ${response.statusCode}');
-      }
-    } catch (e) {
-      Navigator.pop(context); // Close loading dialog if still open
-      print('Download error: $e');
-      _showErrorSnackBar('Download error: $e');
-    }
   }
 
   void _showSuccessSnackBar(String message) {
