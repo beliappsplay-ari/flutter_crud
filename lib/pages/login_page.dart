@@ -46,6 +46,21 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  Future<void> _testConnection() async {
+    try {
+      _showSnackBar('Testing connection...');
+      bool connected = await AuthService.testConnection();
+
+      if (connected) {
+        _showSnackBar('✅ API Connected Successfully!');
+      } else {
+        _showSnackBar('❌ API Connection Failed');
+      }
+    } catch (e) {
+      _showSnackBar('❌ Connection Error: $e');
+    }
+  }
+
   void _showSnackBar(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -210,8 +225,19 @@ class _LoginPageState extends State<LoginPage> {
 
                 const SizedBox(height: 16),
 
+                // Test Connection Button (for development)
+                if (!const bool.fromEnvironment('dart.vm.product'))
+                  TextButton.icon(
+                    onPressed: _testConnection,
+                    icon: const Icon(Icons.wifi_outlined),
+                    label: const Text('Test API Connection'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.grey[600],
+                    ),
+                  ),
+
                 // Development info (remove in production)
-                if (const bool.fromEnvironment('dart.vm.product') == false)
+                if (!const bool.fromEnvironment('dart.vm.product'))
                   Card(
                     color: Colors.grey[100],
                     child: Padding(

@@ -6,6 +6,51 @@ import '../models/user_model.dart';
 import 'auth_service.dart';
 
 class EmployeeService {
+  Future<DashboardResult> getDashboardData() async {
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/dashboard'), headers: await _headers)
+          .timeout(const Duration(seconds: 15));
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        return DashboardResult.success(data: data['data']);
+      } else {
+        return DashboardResult.error(
+          data['message'] ?? 'Failed to get dashboard data',
+        );
+      }
+    } on TimeoutException {
+      return DashboardResult.error('Connection timeout');
+    } catch (e) {
+      return DashboardResult.error('Network error: $e');
+    }
+  }
+
+  // Get salary slips
+  Future<SalarySlipResult> getSalarySlips() async {
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/salary-slips'), headers: await _headers)
+          .timeout(const Duration(seconds: 15));
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        return SalarySlipResult.success(data: data['data']);
+      } else {
+        return SalarySlipResult.error(
+          data['message'] ?? 'Failed to get salary slips',
+        );
+      }
+    } on TimeoutException {
+      return SalarySlipResult.error('Connection timeout');
+    } catch (e) {
+      return SalarySlipResult.error('Network error: $e');
+    }
+  }
+
   static String get baseUrl =>
       dotenv.env['API_URL'] ?? 'http://localhost:8000/api';
   final AuthService _authService = AuthService();
@@ -125,6 +170,46 @@ class EmployeeService {
     } catch (e) {
       return EmployeeListResult.error('Network error: $e');
     }
+  }
+}
+
+class DashboardResult {
+  final bool success;
+  final String message;
+  final dynamic data;
+
+  DashboardResult._({required this.success, required this.message, this.data});
+
+  factory DashboardResult.success({dynamic data, String? message}) {
+    return DashboardResult._(
+      success: true,
+      message: message ?? 'Success',
+      data: data,
+    );
+  }
+
+  factory DashboardResult.error(String message) {
+    return DashboardResult._(success: false, message: message);
+  }
+}
+
+class SalarySlipResult {
+  final bool success;
+  final String message;
+  final dynamic data;
+
+  SalarySlipResult._({required this.success, required this.message, this.data});
+
+  factory SalarySlipResult.success({dynamic data, String? message}) {
+    return SalarySlipResult._(
+      success: true,
+      message: message ?? 'Success',
+      data: data,
+    );
+  }
+
+  factory SalarySlipResult.error(String message) {
+    return SalarySlipResult._(success: false, message: message);
   }
 }
 
