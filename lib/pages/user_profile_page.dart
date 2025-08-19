@@ -127,8 +127,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
               const SizedBox(height: 16),
               if (_currentUser?.employee != null) ...[
                 _buildEmployeeInfoCard(),
-                const SizedBox(height: 16),
-                _buildEmployeeDetailsCard(),
               ] else
                 _buildNoEmployeeCard(),
             ],
@@ -200,41 +198,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 16),
-            //_buildInfoRow('Employee ID', employee.id.toString()),
             _buildInfoRow('Emp. Number', employee.empno),
             _buildInfoRow('Full Name', employee.fullname),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEmployeeDetailsCard() {
-    final employee = _currentUser!.employee!;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Employee Details',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 16),
-            _buildInfoRow('City', employee.city?.name ?? 'Not set'),
-            _buildInfoRow('Gender', employee.gender?.name ?? 'Not set'),
-            _buildInfoRow(
-              'Marital Status',
-              employee.maritalStatus?.name ?? 'Not set',
-            ),
-            _buildInfoRow(
-              'Nationality',
-              employee.nationality?.name ?? 'Not set',
-            ),
-            _buildInfoRow('Religion', employee.religion?.name ?? 'Not set'),
-            if (employee.createdAt != null)
-              _buildInfoRow('Created At', employee.createdAt!),
           ],
         ),
       ),

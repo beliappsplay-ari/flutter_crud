@@ -18,10 +18,14 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'HRIS DGE',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color.fromARGB(255, 2, 30, 116),
-        ),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
+        // Override AppBar theme untuk biru solid
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF1976D2), // Biru solid untuk AppBar
+          foregroundColor: Colors.white, // Text putih
+          elevation: 0,
+        ),
       ),
       home: const AuthWrapper(),
       debugShowCheckedModeBanner: false,
@@ -87,9 +91,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         }
       }
     } catch (e) {
-      print(
-        'Auth check error: $e',
-      ); // ← INI yang error, sekarang sudah diperbaiki
+      print('Auth check error: $e');
       if (mounted) {
         setState(() {
           _isLoggedIn = false;

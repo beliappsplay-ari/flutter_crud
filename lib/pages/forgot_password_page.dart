@@ -1,43 +1,42 @@
+// File: lib/pages/forgot_password_page.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'login_page.dart';
 
-class RegisterPage extends StatefulWidget {
-  const RegisterPage({super.key});
+class ForgotPasswordPage extends StatefulWidget {
+  const ForgotPasswordPage({super.key});
 
   @override
-  State<RegisterPage> createState() => _RegisterPageState();
+  State<ForgotPasswordPage> createState() => _ForgotPasswordPageState();
 }
 
-class _RegisterPageState extends State<RegisterPage> {
+class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
   final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
+  final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
   bool _isLoading = false;
-  bool _obscurePassword = true;
+  bool _obscureNewPassword = true;
   bool _obscureConfirmPassword = true;
 
   @override
   void dispose() {
-    _nameController.dispose();
     _emailController.dispose();
-    _passwordController.dispose();
+    _newPasswordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
   }
 
-  Future<void> _register() async {
+  Future<void> _resetPassword() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
     // Check password confirmation
-    if (_passwordController.text != _confirmPasswordController.text) {
+    if (_newPasswordController.text != _confirmPasswordController.text) {
       _showSnackBar('Passwords do not match', Colors.red);
       return;
     }
@@ -47,10 +46,10 @@ class _RegisterPageState extends State<RegisterPage> {
     });
 
     try {
-      final apiUrl = dotenv.env['API_URL'] ?? 'http://10.0.2.2:8000/api';
-      final url = '$apiUrl/register';
+      final apiUrl = dotenv.env['API_URL'] ?? 'http://160.25.200.14:8888/api';
+      final url = '$apiUrl/reset-password';
 
-      print('Registering user at: $url');
+      print('Resetting password at: $url');
 
       final response = await http
           .post(
@@ -60,24 +59,26 @@ class _RegisterPageState extends State<RegisterPage> {
               'Content-Type': 'application/json',
             },
             body: jsonEncode({
-              'name': _nameController.text.trim(),
               'email': _emailController.text.trim(),
-              'password': _passwordController.text,
+              'password': _newPasswordController.text,
               'password_confirmation': _confirmPasswordController.text,
             }),
           )
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 15));
 
-      print('Register response status: ${response.statusCode}');
-      print('Register response body: ${response.body}');
+      print('Reset response status: ${response.statusCode}');
+      print('Reset response body: ${response.body}');
 
       final data = jsonDecode(response.body);
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
+      if (response.statusCode == 200) {
         if (data['success'] == true) {
-          _showSnackBar('Registration successful! Please login.', Colors.green);
+          _showSnackBar(
+            data['message'] ?? 'Password reset successfully!',
+            Colors.green,
+          );
 
-          // Navigate to login page after successful registration
+          // Navigate to login page after successful reset
           Future.delayed(const Duration(seconds: 2), () {
             if (mounted) {
               Navigator.pushReplacement(
@@ -87,7 +88,10 @@ class _RegisterPageState extends State<RegisterPage> {
             }
           });
         } else {
-          _showSnackBar(data['message'] ?? 'Registration failed', Colors.red);
+          _showSnackBar(
+            data['message'] ?? 'Failed to reset password',
+            Colors.red,
+          );
         }
       } else {
         // Handle validation errors
@@ -99,11 +103,14 @@ class _RegisterPageState extends State<RegisterPage> {
               : firstError;
           _showSnackBar(errorMessage.toString(), Colors.red);
         } else {
-          _showSnackBar(data['message'] ?? 'Registration failed', Colors.red);
+          _showSnackBar(
+            data['message'] ?? 'Failed to reset password',
+            Colors.red,
+          );
         }
       }
     } catch (e) {
-      print('Registration error: $e');
+      print('Reset password error: $e');
       _showSnackBar('Network error: Please check your connection', Colors.red);
     } finally {
       if (mounted) {
@@ -120,7 +127,7 @@ class _RegisterPageState extends State<RegisterPage> {
         content: Text(message),
         backgroundColor: color,
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 3),
+        duration: const Duration(seconds: 4),
       ),
     );
   }
@@ -153,22 +160,23 @@ class _RegisterPageState extends State<RegisterPage> {
                       color: Colors.white.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: Column(
+                    child: const Column(
                       children: [
-                        Icon(Icons.person_add, size: 64, color: Colors.white),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'Create Account',
+                        Icon(Icons.lock_reset, size: 64, color: Colors.white),
+                        SizedBox(height: 16),
+                        Text(
+                          'Reset Password',
                           style: TextStyle(
                             fontSize: 28,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'HRIS - Digital Group Enterprise',
+                        SizedBox(height: 8),
+                        Text(
+                          'Enter your email and new password',
                           style: TextStyle(fontSize: 16, color: Colors.white70),
+                          textAlign: TextAlign.center,
                         ),
                       ],
                     ),
@@ -176,7 +184,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
                   const SizedBox(height: 32),
 
-                  // Registration Form
+                  // Reset Password Form
                   Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
@@ -195,38 +203,35 @@ class _RegisterPageState extends State<RegisterPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          // Full Name Field
-                          TextFormField(
-                            controller: _nameController,
-                            keyboardType: TextInputType.name,
-                            textCapitalization: TextCapitalization.words,
-                            decoration: InputDecoration(
-                              labelText: 'Full Name',
-                              hintText: 'Enter your full name',
-                              prefixIcon: const Icon(Icons.person),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide(
-                                  color: Theme.of(context).primaryColor,
-                                  width: 2,
-                                ),
-                              ),
+                          // Instructions
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.blue[50],
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.blue[200]!),
                             ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter your full name';
-                              }
-                              if (value.length < 2) {
-                                return 'Name must be at least 2 characters';
-                              }
-                              return null;
-                            },
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.info_outline,
+                                  color: Colors.blue[600],
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    'Please enter your registered email and create a new password.',
+                                    style: TextStyle(
+                                      color: Colors.blue[800],
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
 
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 24),
 
                           // Email Field
                           TextFormField(
@@ -235,7 +240,7 @@ class _RegisterPageState extends State<RegisterPage> {
                             autocorrect: false,
                             decoration: InputDecoration(
                               labelText: 'Email Address',
-                              hintText: 'Enter your email address',
+                              hintText: 'Enter your registered email',
                               prefixIcon: const Icon(Icons.email),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
@@ -263,23 +268,23 @@ class _RegisterPageState extends State<RegisterPage> {
 
                           const SizedBox(height: 16),
 
-                          // Password Field
+                          // New Password Field
                           TextFormField(
-                            controller: _passwordController,
-                            obscureText: _obscurePassword,
+                            controller: _newPasswordController,
+                            obscureText: _obscureNewPassword,
                             decoration: InputDecoration(
-                              labelText: 'Password',
-                              hintText: 'Enter your password',
+                              labelText: 'New Password',
+                              hintText: 'Enter your new password',
                               prefixIcon: const Icon(Icons.lock),
                               suffixIcon: IconButton(
                                 icon: Icon(
-                                  _obscurePassword
+                                  _obscureNewPassword
                                       ? Icons.visibility
                                       : Icons.visibility_off,
                                 ),
                                 onPressed: () {
                                   setState(() {
-                                    _obscurePassword = !_obscurePassword;
+                                    _obscureNewPassword = !_obscureNewPassword;
                                   });
                                 },
                               ),
@@ -296,7 +301,7 @@ class _RegisterPageState extends State<RegisterPage> {
                             ),
                             validator: (value) {
                               if (value == null || value.isEmpty) {
-                                return 'Please enter a password';
+                                return 'Please enter a new password';
                               }
                               if (value.length < 6) {
                                 return 'Password must be at least 6 characters';
@@ -307,13 +312,13 @@ class _RegisterPageState extends State<RegisterPage> {
 
                           const SizedBox(height: 16),
 
-                          // Confirm Password Field
+                          // Confirm New Password Field
                           TextFormField(
                             controller: _confirmPasswordController,
                             obscureText: _obscureConfirmPassword,
                             decoration: InputDecoration(
-                              labelText: 'Confirm Password',
-                              hintText: 'Confirm your password',
+                              labelText: 'Confirm New Password',
+                              hintText: 'Confirm your new password',
                               prefixIcon: const Icon(Icons.lock_outline),
                               suffixIcon: IconButton(
                                 icon: Icon(
@@ -341,9 +346,9 @@ class _RegisterPageState extends State<RegisterPage> {
                             ),
                             validator: (value) {
                               if (value == null || value.isEmpty) {
-                                return 'Please confirm your password';
+                                return 'Please confirm your new password';
                               }
-                              if (value != _passwordController.text) {
+                              if (value != _newPasswordController.text) {
                                 return 'Passwords do not match';
                               }
                               return null;
@@ -352,11 +357,11 @@ class _RegisterPageState extends State<RegisterPage> {
 
                           const SizedBox(height: 24),
 
-                          // Register Button
+                          // Reset Password Button
                           SizedBox(
                             height: 50,
                             child: ElevatedButton(
-                              onPressed: _isLoading ? null : _register,
+                              onPressed: _isLoading ? null : _resetPassword,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Theme.of(context).primaryColor,
                                 foregroundColor: Colors.white,
@@ -378,7 +383,7 @@ class _RegisterPageState extends State<RegisterPage> {
                                       ),
                                     )
                                   : const Text(
-                                      'Create Account',
+                                      'Reset Password',
                                       style: TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.bold,
@@ -389,12 +394,12 @@ class _RegisterPageState extends State<RegisterPage> {
 
                           const SizedBox(height: 16),
 
-                          // Login Link
+                          // Back to Login Link
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               const Text(
-                                "Already have an account? ",
+                                "Remember your password? ",
                                 style: TextStyle(
                                   fontSize: 14,
                                   color: Colors.grey,
@@ -410,7 +415,7 @@ class _RegisterPageState extends State<RegisterPage> {
                                   );
                                 },
                                 child: Text(
-                                  'Login here',
+                                  'Back to Login',
                                   style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.bold,

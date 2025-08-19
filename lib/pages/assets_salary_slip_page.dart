@@ -1,354 +1,69 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_crud/pages/halaman_produk.dart';
-import 'package:flutter_crud/pages/user_profile_page.dart';
-import 'package:flutter_crud/pages/assets_salary_slip_page.dart';
-import 'package:flutter_crud/pages/salary_slip_page.dart';
-import '../services/auth_service.dart';
-import '../services/assets_pdf_service.dart';
 import '../models/assets_salary_slip.dart';
+import '../services/assets_pdf_service.dart';
 import 'assets_pdf_viewer.dart';
-import 'login_page.dart';
+import 'user_profile_page.dart';
 
-class DashboardPage extends StatefulWidget {
-  const DashboardPage({super.key});
-
-  @override
-  State<DashboardPage> createState() => _DashboardPageState();
-}
-
-class _DashboardPageState extends State<DashboardPage> {
-  final _authService = AuthService();
-  int _selectedIndex = 0; // Index halaman yang sedang aktif
-
-  // Daftar halaman yang akan ditampilkan di Bottom Navigation Bar
-  Widget _getPage(int index) {
-    switch (index) {
-      case 0:
-        return DashboardHomePage(onNavigate: _onItemTapped);
-      case 1:
-        return const AssetsSalarySlipPageContent(); // Content only without navigation
-      case 2:
-        return const Center(child: Text('Settings Page'));
-      case 3:
-        return const UserProfilePage();
-      default:
-        return DashboardHomePage(onNavigate: _onItemTapped);
-    }
-  }
-
-  // Metode yang dipanggil saat item Bottom Navigation Bar ditekan
-  void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-  }
-
-  // Fungsi logout
-  Future<void> _logout() async {
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Logout'),
-        content: const Text('Are you sure you want to logout?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Logout'),
-          ),
-        ],
-      ),
-    );
-
-    if (result == true) {
-      // Show loading
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const Center(child: CircularProgressIndicator()),
-      );
-
-      final logoutResult = await _authService.logout();
-
-      if (!mounted) return;
-
-      // Close loading dialog
-      Navigator.of(context).pop();
-
-      // Navigate to login and clear all routes
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const LoginPage()),
-        (route) => false,
-      );
-
-      // Show logout message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(logoutResult.message),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
-  }
+class AssetsSalarySlipPage extends StatefulWidget {
+  const AssetsSalarySlipPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          _selectedIndex == 0
-              ? 'HRIS DGE'
-              : _selectedIndex == 1
-              ? 'PDF Slips'
-              : _selectedIndex == 2
-              ? 'Settings'
-              : 'Profile',
-        ),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _logout,
-            tooltip: 'Logout',
-          ),
-        ],
-      ),
-      body: _getPage(_selectedIndex),
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(
-            icon: Icon(Icons.dashboard),
-            label: 'Dashboard',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.receipt_long),
-            label: 'Salary Slips',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
-            label: 'Settings',
-          ),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-        ],
-        currentIndex: _selectedIndex,
-        selectedItemColor: Theme.of(context).colorScheme.primary,
-        unselectedItemColor: Colors.grey,
-        onTap: _onItemTapped,
-      ),
-    );
-  }
+  State<AssetsSalarySlipPage> createState() => _AssetsSalarySlipPageState();
 }
 
-// Dashboard Home Page dengan menu grid
-class DashboardHomePage extends StatelessWidget {
-  final Function(int)? onNavigate;
-
-  const DashboardHomePage({super.key, this.onNavigate});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Welcome Section
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Theme.of(context).primaryColor,
-                  Theme.of(context).primaryColor.withOpacity(0.8),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Welcome!',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  'HRIS - DIAN GARAHA ELEKTRIKA',
-                  style: TextStyle(color: Colors.white70, fontSize: 16),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // Quick Actions Section
-          const Text(
-            'Quick Actions',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-
-          const SizedBox(height: 16),
-
-          // Menu Grid
-          Expanded(
-            child: GridView.count(
-              crossAxisCount: 2,
-              mainAxisSpacing: 16,
-              crossAxisSpacing: 16,
-              children: [
-                _buildMenuCard(
-                  context,
-                  icon: Icons.people,
-                  title: 'Employees',
-                  subtitle: 'Manage employee data',
-                  color: Colors.blue,
-                  onTap: () {
-                    // Navigate to employees page (for now, show message)
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Employees feature - coming soon!'),
-                      ),
-                    );
-                  },
-                ),
-                _buildMenuCard(
-                  context,
-                  icon: Icons.cloud_download,
-                  title: 'Salary slips',
-                  subtitle: 'View salary slips',
-                  color: Theme.of(context).colorScheme.primary,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const AssetsSalarySlipPage(),
-                      ),
-                    );
-                  },
-                ),
-                _buildMenuCard(
-                  context,
-                  icon: Icons.analytics,
-                  title: 'Reports',
-                  subtitle: 'View analytics & reports',
-                  color: Colors.purple,
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Reports feature - coming soon!'),
-                      ),
-                    );
-                  },
-                ),
-                _buildMenuCard(
-                  context,
-                  icon: Icons.settings,
-                  title: 'Settings',
-                  subtitle: 'App configuration',
-                  color: Colors.grey,
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Settings feature - coming soon!'),
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMenuCard(
-    BuildContext context, {
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Icon(icon, size: 32, color: color),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// Content-only widget for dashboard bottom navigation
-class AssetsSalarySlipPageContent extends StatefulWidget {
-  const AssetsSalarySlipPageContent({super.key});
-
-  @override
-  State<AssetsSalarySlipPageContent> createState() =>
-      _AssetsSalarySlipPageContentState();
-}
-
-class _AssetsSalarySlipPageContentState
-    extends State<AssetsSalarySlipPageContent> {
+class _AssetsSalarySlipPageState extends State<AssetsSalarySlipPage> {
   List<AssetsSalarySlip> _salarySlips = [];
   List<AssetsSalarySlip> _filteredSlips = [];
   bool _isLoading = true;
   String? _error;
   String? _selectedPeriod;
   List<String> _availablePeriods = [];
+  int _selectedIndex = 1; // Start with Server PDFs tab
 
   @override
   void initState() {
     super.initState();
     _loadSalarySlips();
+  }
+
+  // Bottom navigation pages
+  Widget _getPage(int index) {
+    switch (index) {
+      case 0:
+        return const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.dashboard, size: 64, color: Colors.grey),
+              SizedBox(height: 16),
+              Text(
+                'Dashboard - Will navigate back',
+                style: TextStyle(fontSize: 18, color: Colors.grey),
+              ),
+            ],
+          ),
+        );
+      case 1:
+        return _buildServerPDFContent();
+      case 2:
+        return const Center(child: Text('Settings Page'));
+      case 3:
+        return const UserProfilePage();
+      default:
+        return _buildServerPDFContent();
+    }
+  }
+
+  // Handle bottom navigation tap
+  void _onItemTapped(int index) {
+    if (index == 0) {
+      // Navigate back to dashboard
+      Navigator.pop(context);
+    } else {
+      setState(() {
+        _selectedIndex = index;
+      });
+    }
   }
 
   Future<void> _loadSalarySlips() async {
@@ -444,6 +159,47 @@ class _AssetsSalarySlipPageContentState
 
   @override
   Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('PDF Slips'),
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        actions: [
+          if (_selectedIndex == 1) // Only show refresh on server PDF tab
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _loadSalarySlips,
+              tooltip: 'Refresh',
+            ),
+        ],
+      ),
+      body: _getPage(_selectedIndex),
+      bottomNavigationBar: BottomNavigationBar(
+        type: BottomNavigationBarType.fixed,
+        items: const <BottomNavigationBarItem>[
+          BottomNavigationBarItem(
+            icon: Icon(Icons.dashboard),
+            label: 'Dashboard',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.receipt_long),
+            label: 'Salary Slip',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.settings),
+            label: 'Settings',
+          ),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+        ],
+        currentIndex: _selectedIndex,
+        selectedItemColor: Theme.of(context).colorScheme.primary,
+        unselectedItemColor: Colors.grey,
+        onTap: _onItemTapped,
+      ),
+    );
+  }
+
+  // Server PDF content (original functionality)
+  Widget _buildServerPDFContent() {
     return Column(
       children: [
         // Period Filter Section
@@ -671,7 +427,7 @@ class _AssetsSalarySlipPageContentState
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          slip.hasPdf ? 'Server PDF' : 'No PDF',
+                          slip.hasPdf ? 'salary slip PDF' : 'No PDF',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 12,
@@ -740,7 +496,7 @@ class _AssetsSalarySlipPageContentState
                     slip.hasPdf ? Icons.cloud_download : Icons.warning,
                   ),
                   label: Text(
-                    slip.hasPdf ? 'View Server PDF' : 'PDF Not Available',
+                    slip.hasPdf ? 'View salary slip PDF' : 'PDF Not Available',
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: slip.hasPdf ? Colors.green : Colors.grey,

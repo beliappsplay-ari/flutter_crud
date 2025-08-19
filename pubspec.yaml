@@ -1,5 +1,5 @@
 name: flutter_crud
-description: "A new Flutter project."
+description: "HRIS DGE - Human Resource Information System"
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -20,13 +20,26 @@ dependencies:
   permission_handler: ^11.0.1
   share_plus: ^7.2.1
   url_launcher: ^6.2.1
+  device_info_plus: ^9.1.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.13.1
 
 flutter:
   uses-material-design: true
   assets:
     - .env
+    - assets/images/
+
+# Configuration untuk icon launcher
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/images/dge_logo.png"  # Gunakan logo DGE yang sudah ada
+  min_sdk_android: 21  # Android 5.0
+  # Untuk Android, gunakan logo yang sama tanpa adaptive icon dulu
+  adaptive_icon_background: "#1976D2"  # Background biru DGE
+  adaptive_icon_foreground: "assets/images/dge_logo.png"  # Logo yang sama
