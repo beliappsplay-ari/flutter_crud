@@ -91,21 +91,23 @@ class _LoginPageState extends State<LoginPage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // App Logo/Title
-                Icon(
-                  Icons.business,
-                  size: 80,
-                  color: Theme.of(context).primaryColor,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'HRIS DGE',
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).primaryColor,
+                // Company Logo - OPTION 1: Menggunakan Image Asset
+                Container(
+                  height: 55,
+                  width: double.infinity,
+                  child: Image.asset(
+                    'assets/images/logo3.png', // Path ke logo file
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) {
+                      // Fallback jika logo tidak ditemukan
+                      return _buildFallbackLogo();
+                    },
                   ),
                 ),
-                const SizedBox(height: 48),
+
+                // OPTION 2: Jika tidak ada file logo, gunakan Text-based logo
+                // _buildTextLogo(),
+                const SizedBox(height: 32),
 
                 // Email Field
                 TextFormField(
@@ -165,7 +167,7 @@ class _LoginPageState extends State<LoginPage> {
                   },
                 ),
 
-                // Forgot Password Link - Add this section
+                // Forgot Password Link
                 const SizedBox(height: 8),
                 Align(
                   alignment: Alignment.centerRight,
@@ -189,7 +191,7 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ),
 
-                const SizedBox(height: 16), // Reduced from 32
+                const SizedBox(height: 16),
                 // Login Button
                 SizedBox(
                   width: double.infinity,
@@ -277,6 +279,101 @@ class _LoginPageState extends State<LoginPage> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  // Fallback logo jika image asset tidak ditemukan
+  Widget _buildFallbackLogo() {
+    return Container(
+      height: 120,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1976D2), // Warna biru DGE
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Text(
+              'DGE',
+              style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+                letterSpacing: 2,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'PT Dian Graha Elektrika',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF1976D2),
+            ),
+          ),
+          const Text(
+            'HRIS System',
+            style: TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Alternative: Text-based logo (uncomment if you want to use this instead)
+  Widget _buildTextLogo() {
+    return Container(
+      height: 120,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // DGE Logo Text
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1976D2), // Warna biru seperti logo asli
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.blue.withOpacity(0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: const Text(
+              'DGE',
+              style: TextStyle(
+                fontSize: 40,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+                letterSpacing: 3,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'PT Dian Graha Elektrika',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF1976D2),
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Human Resource Information System',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -671,7 +671,7 @@ class _AssetsSalarySlipPageContentState
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          slip.hasPdf ? 'Server PDF' : 'No PDF',
+                          slip.hasPdf ? 'Salary Slip PDF' : 'No PDF',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 12,
@@ -740,7 +740,7 @@ class _AssetsSalarySlipPageContentState
                     slip.hasPdf ? Icons.cloud_download : Icons.warning,
                   ),
                   label: Text(
-                    slip.hasPdf ? 'View Server PDF' : 'PDF Not Available',
+                    slip.hasPdf ? 'View Salary Slip PDF' : 'PDF Not Available',
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: slip.hasPdf ? Colors.green : Colors.grey,

@@ -17,6 +17,8 @@ class _RegisterPageState extends State<RegisterPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _empnoController =
+      TextEditingController(); // NEW: Employee Number input
 
   bool _isLoading = false;
   bool _obscurePassword = true;
@@ -28,6 +30,7 @@ class _RegisterPageState extends State<RegisterPage> {
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _empnoController.dispose(); // NEW: Dispose empno controller
     super.dispose();
   }
 
@@ -64,6 +67,8 @@ class _RegisterPageState extends State<RegisterPage> {
               'email': _emailController.text.trim(),
               'password': _passwordController.text,
               'password_confirmation': _confirmPasswordController.text,
+              'empno': _empnoController.text
+                  .trim(), // NEW: Send employee number
             }),
           )
           .timeout(const Duration(seconds: 10));
@@ -146,7 +151,7 @@ class _RegisterPageState extends State<RegisterPage> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Logo and Title
+                  // Title Section - No Logo
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
@@ -155,26 +160,26 @@ class _RegisterPageState extends State<RegisterPage> {
                     ),
                     child: Column(
                       children: [
-                        Icon(Icons.person_add, size: 64, color: Colors.white),
-                        const SizedBox(height: 16),
+                        Icon(Icons.person_add, size: 48, color: Colors.white),
+                        const SizedBox(height: 12),
                         const Text(
                           'Create Account',
                           style: TextStyle(
-                            fontSize: 28,
+                            fontSize: 24,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 6),
                         const Text(
-                          'HRIS - Digital Group Enterprise',
-                          style: TextStyle(fontSize: 16, color: Colors.white70),
+                          'HRIS - Dian Graha Elektrika',
+                          style: TextStyle(fontSize: 14, color: Colors.white70),
                         ),
                       ],
                     ),
                   ),
 
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 24),
 
                   // Registration Form
                   Container(
@@ -195,6 +200,44 @@ class _RegisterPageState extends State<RegisterPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          // Employee Number Field - NEW
+                          TextFormField(
+                            controller: _empnoController,
+                            keyboardType: TextInputType.text,
+                            textCapitalization: TextCapitalization.characters,
+                            decoration: InputDecoration(
+                              labelText: 'Employee Number',
+                              hintText: 'Enter your employee number',
+                              prefixIcon: const Icon(Icons.badge),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(
+                                  color: Theme.of(context).primaryColor,
+                                  width: 2,
+                                ),
+                              ),
+                              helperText: 'Your company employee ID',
+                            ),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter your employee number';
+                              }
+                              if (value.length < 3) {
+                                return 'Employee number must be at least 3 characters';
+                              }
+                              // Optional: Add specific format validation
+                              // if (!RegExp(r'^[A-Z0-9]+$').hasMatch(value)) {
+                              //   return 'Employee number must contain only letters and numbers';
+                              // }
+                              return null;
+                            },
+                          ),
+
+                          const SizedBox(height: 16),
+
                           // Full Name Field
                           TextFormField(
                             controller: _nameController,

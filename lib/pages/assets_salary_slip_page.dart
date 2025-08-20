@@ -427,7 +427,7 @@ class _AssetsSalarySlipPageState extends State<AssetsSalarySlipPage> {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          slip.hasPdf ? 'salary slip PDF' : 'No PDF',
+                          slip.hasPdf ? 'Salary Slip PDF' : 'No PDF',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 12,
