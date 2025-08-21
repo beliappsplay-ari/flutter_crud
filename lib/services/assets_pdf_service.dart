@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,7 +15,10 @@ class AssetsPdfService {
     return prefs.getString('token');
   }
 
-  // Check if PDF exists in assets/slip folder
+  // ============================================================================
+  // SALARY SLIP METHODS
+  // ============================================================================
+
   static Future<bool> checkPdfExists(String empno, String period) async {
     try {
       final token = await getToken();
@@ -43,12 +47,10 @@ class AssetsPdfService {
     }
   }
 
-  // Get PDF URL for viewing
   static String getPdfUrl(String empno, String period) {
     return '$baseUrl/api/payroll/view-pdf/$empno/$period';
   }
 
-  // Download PDF bytes
   static Future<List<int>?> downloadPdfBytes(
     String empno,
     String period,
@@ -79,15 +81,12 @@ class AssetsPdfService {
     }
   }
 
-  // Get my salary slips with PDF availability info
   static Future<List<Map<String, dynamic>>> getMySlipsWithPdfInfo() async {
     try {
       final token = await getToken();
       if (token == null) {
         throw Exception('No authentication token found');
       }
-
-      //final url = '$baseUrl/api/payroll/my-slips';
 
       final url = '$baseUrl/api/flutter/my-slips';
 
@@ -117,5 +116,62 @@ class AssetsPdfService {
       print('Error in getMySlipsWithPdfInfo: $e');
       throw Exception('Network error: $e');
     }
+  }
+
+  // ============================================================================
+  // HELPER METHODS
+  // ============================================================================
+
+  static String formatPeriod(String period) {
+    if (period.isEmpty) return '';
+
+    final parts = period.split(' ');
+    if (parts.length != 2) return period;
+
+    final monthMap = {
+      'January': 'Jan',
+      'February': 'Feb',
+      'March': 'Mar',
+      'April': 'Apr',
+      'May': 'May',
+      'June': 'Jun',
+      'July': 'Jul',
+      'August': 'Aug',
+      'September': 'Sep',
+      'October': 'Oct',
+      'November': 'Nov',
+      'December': 'Dec',
+    };
+
+    final shortMonth = monthMap[parts[0]] ?? parts[0];
+    return '$shortMonth ${parts[1]}';
+  }
+
+  static String periodToPdfFilename(String period) {
+    final periodMap = {
+      'January': '01',
+      'February': '02',
+      'March': '03',
+      'April': '04',
+      'May': '05',
+      'June': '06',
+      'July': '07',
+      'August': '08',
+      'September': '09',
+      'October': '10',
+      'November': '11',
+      'December': '12',
+    };
+
+    final parts = period.split(' ');
+    if (parts.length != 2) return '';
+
+    final monthName = parts[0];
+    final year = parts[1];
+
+    if (!periodMap.containsKey(monthName)) return '';
+
+    final monthNumber = periodMap[monthName];
+    return '$year$monthNumber.pdf';
   }
 }
