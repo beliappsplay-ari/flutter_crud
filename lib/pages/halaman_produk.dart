@@ -1,12 +1,8 @@
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'dart:async';
-import 'package:flutter_crud/tambah_produk.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'login_page.dart';
-import 'user_profile_page.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 
 class HalamanProduk extends StatefulWidget {
   const HalamanProduk({super.key});
@@ -16,242 +12,227 @@ class HalamanProduk extends StatefulWidget {
 }
 
 class _HalamanProdukState extends State<HalamanProduk> {
-  List _listdata = [];
-  bool _loading = true;
-  String _errorMessage = '';
-
-  Future<void> _logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.clear(); // Menghapus semua data dari SharedPreferences
-
-    if (!mounted) return;
-
-    // Kembali ke halaman login dan hapus semua halaman sebelumnya
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (context) => LoginPage()),
-      (Route<dynamic> route) => false,
-    );
-  }
-
-  Future _getData() async {
-    // List URL untuk dicoba secara berurutan
-    //List<String> urls = ['http://192.168.0.121:80/api_hris/read.php'];
-    // List<String> urls = ['dotenv.env['API_URL']!/read.php'];
-    List<String> urls = ['${dotenv.env['API_URL']}/read.php'];
-
-    for (String url in urls) {
-      try {
-        print('Mencoba koneksi ke: $url');
-
-        // Buat client dengan konfigurasi khusus
-        var client = http.Client();
-
-        final response = await client
-            .get(
-              Uri.parse(url),
-              headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-                'User-Agent': 'Flutter App',
-              },
-            )
-            .timeout(
-              Duration(seconds: 10), // Kurangi timeout untuk testing
-              onTimeout: () {
-                throw TimeoutException('Koneksi timeout setelah 10 detik');
-              },
-            );
-
-        print('Status response: ${response.statusCode}');
-        print('Isi response: ${response.body}');
-
-        if (response.statusCode == 200) {
-          final responseBody = response.body;
-
-          // Cek apakah response kosong
-          if (responseBody.isEmpty) {
-            throw Exception('Response kosong dari server');
-          }
-
-          // Coba parse JSON
-          try {
-            final data = jsonDecode(responseBody);
-            setState(() {
-              _listdata = data is List ? data : [data];
-              _loading = false;
-              _errorMessage = '';
-            });
-            print('Berhasil terhubung ke: $url');
-            client.close();
-            return; // Keluar dari loop jika berhasil
-          } catch (e) {
-            throw Exception('Gagal parsing JSON: $e');
-          }
-        } else {
-          throw Exception('Server error: ${response.statusCode}');
-        }
-      } catch (e) {
-        print('Gagal dengan URL $url: $e');
-        continue; // Lanjut ke URL berikutnya
-      }
-    }
-
-    // Jika semua URL gagal
-    setState(() {
-      _loading = false;
-      _errorMessage =
-          'Tidak dapat terhubung ke server. Semua URL telah dicoba.';
-    });
-    _showErrorSnackBar('Tidak dapat terhubung ke server');
-  }
-
-  void _showErrorSnackBar(String message) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: Colors.red,
-          action: SnackBarAction(
-            label: 'Coba Lagi',
-            textColor: Colors.white,
-            onPressed: () {
-              setState(() {
-                _loading = true;
-                _errorMessage = '';
-              });
-              _getData();
-            },
-          ),
-        ),
-      );
-    }
-  }
+  List<dynamic> employees = [];
+  bool isLoading = true;
+  String? errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _getData();
+    loadEmployees();
+  }
+
+  // Get token dari SharedPreferences
+  Future<String?> getToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('token');
+  }
+
+  Future<void> loadEmployees() async {
+    setState(() {
+      isLoading = true;
+      errorMessage = null;
+    });
+
+    try {
+      // Get token untuk authentication
+      final token = await getToken();
+
+      if (token == null) {
+        setState(() {
+          errorMessage = 'No authentication token found. Please login again.';
+          isLoading = false;
+        });
+        return;
+      }
+
+      final apiUrl = dotenv.env['API_URL'] ?? 'http://10.0.2.2:8000/api';
+      final url = '$apiUrl/employees';
+
+      print('Loading employees from: $url');
+      print('Using token: ${token.substring(0, 20)}...');
+
+      final response = await http
+          .get(
+            Uri.parse(url),
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token', // TAMBAH TOKEN AUTHORIZATION
+            },
+          )
+          .timeout(const Duration(seconds: 10));
+
+      print('Response status: ${response.statusCode}');
+      print('Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        if (data['success'] == true) {
+          setState(() {
+            employees = data['data'] ?? [];
+            isLoading = false;
+          });
+        } else {
+          setState(() {
+            errorMessage = data['message'] ?? 'Failed to load employees';
+            isLoading = false;
+          });
+        }
+      } else if (response.statusCode == 401) {
+        setState(() {
+          errorMessage = 'Authentication expired. Please login again.';
+          isLoading = false;
+        });
+      } else {
+        setState(() {
+          errorMessage = 'Server error: ${response.statusCode}';
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading employees: $e');
+      setState(() {
+        errorMessage = 'Network error: $e';
+        isLoading = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('HRIS DGE'),
-        backgroundColor: Colors.blue,
+        title: const Text('Employees'),
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
           IconButton(
-            icon: Icon(Icons.refresh),
-            onPressed: () {
-              setState(() {
-                _loading = true;
-                _errorMessage = '';
-              });
-              _getData();
-            },
-          ),
-          IconButton(
-            icon: Icon(Icons.logout),
-            onPressed: _logout,
-            tooltip: 'Logout',
+            icon: const Icon(Icons.refresh),
+            onPressed: loadEmployees,
+            tooltip: 'Refresh',
           ),
         ],
       ),
-      body: _loading
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+      body: _buildBody(),
+      floatingActionButton: FloatingActionButton(
+        onPressed: loadEmployees,
+        tooltip: 'Refresh',
+        child: const Icon(Icons.refresh),
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    if (isLoading) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Loading employees...'),
+          ],
+        ),
+      );
+    }
+
+    if (errorMessage != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
+            const SizedBox(height: 16),
+            Text(
+              'Error Loading Data',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Text(
+                errorMessage!,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: loadEmployees,
+              child: const Text('Try Again'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (employees.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.people_outline, size: 64, color: Colors.grey),
+            SizedBox(height: 16),
+            Text('No Employees Found', style: TextStyle(fontSize: 18)),
+            SizedBox(height: 8),
+            Text(
+              'There are no employee records to display.',
+              style: TextStyle(color: Colors.grey),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: loadEmployees,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: employees.length,
+        itemBuilder: (context, index) {
+          final employee = employees[index];
+          return Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ListTile(
+              leading: CircleAvatar(
+                backgroundColor: Theme.of(context).primaryColor,
+                child: Text(
+                  employee['empno']?.toString().substring(0, 2) ?? 'EM',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              title: Text(
+                employee['fullname'] ?? 'Unknown Employee',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('Memuat data...'),
+                  Text('Employee No: ${employee['empno'] ?? 'N/A'}'),
+                  if (employee['user'] != null)
+                    Text('Email: ${employee['user']['email'] ?? 'N/A'}'),
+                  if (employee['user'] != null)
+                    Text('Name: ${employee['user']['name'] ?? 'N/A'}'),
                 ],
               ),
-            )
-          : _errorMessage.isNotEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.error_outline, size: 64, color: Colors.red),
-                  SizedBox(height: 16),
-                  Text(
-                    _errorMessage,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.red),
-                  ),
-                  SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () {
-                      setState(() {
-                        _loading = true;
-                        _errorMessage = '';
-                      });
-                      _getData();
-                    },
-                    child: Text('Coba Lagi'),
-                  ),
-                ],
-              ),
-            )
-          : _listdata.isEmpty
-          ? Center(child: Text('Tidak ada data'))
-          : ListView.builder(
-              itemCount: _listdata.length,
-              itemBuilder: (context, index) {
-                return Card(
-                  margin: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  child: ListTile(
-                    title: Text(
-                      _listdata[index]['fullname'] ?? 'Nama tidak tersedia',
-                    ),
-                    subtitle: Text(
-                      _listdata[index]['empno'] ?? 'Nomor tidak tersedia',
-                    ),
-                    leading: CircleAvatar(child: Text((index + 1).toString())),
+              trailing: const Icon(Icons.arrow_forward_ios),
+              onTap: () {
+                // Handle employee tap - could navigate to detail page
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Tapped: ${employee['fullname']}'),
+                    duration: const Duration(seconds: 2),
                   ),
                 );
               },
             ),
-      floatingActionButton: FloatingActionButton(
-        child: Icon(Icons.add),
-        backgroundColor: Colors.blueAccent,
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => TambahProduk()),
-          ).then((value) {
-            // Refresh data setelah kembali dari halaman tambah
-            if (value == true) {
-              _getData();
-            }
-          });
+          );
         },
       ),
-      bottomNavigationBar: bottomNavigationBar(),
-    );
-  }
-
-  BottomNavigationBar bottomNavigationBar() {
-    return BottomNavigationBar(
-      type: BottomNavigationBarType.fixed,
-      items: const [
-        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-        BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Settings'),
-        BottomNavigationBarItem(icon: Icon(Icons.info_outline), label: 'About'),
-        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'User'),
-      ],
-      currentIndex: 0,
-      onTap: (index) {
-        // Handle navigation if needed
-        if (index == 3) {
-          // Buka tab User (Profil)
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const UserProfilePage()),
-          );
-        }
-      },
     );
   }
 }
