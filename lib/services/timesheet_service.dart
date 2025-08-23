@@ -22,7 +22,7 @@ class TimesheetService {
       );
 
       final response = await http.get(
-        Uri.parse('$baseUrl/timesheet/periods'),
+        Uri.parse('$baseUrl/timesheet'),
         headers: {
           'Authorization': 'Bearer $token',
           'Accept': 'application/json',
@@ -106,9 +106,9 @@ class TimesheetService {
       // Build URL dengan parameter empno jika tersedia
       String url;
       if (empno != null && empno.isNotEmpty) {
-        url = '$baseUrl/timesheet/extract-page/$period?empno=$empno';
+        url = '$baseUrl/flutter/timesheet/$period/pdf?empno=$empno';
       } else {
-        url = '$baseUrl/timesheet/extract-page/$period';
+        url = '$baseUrl/flutter/timesheet/$period/pdf';
       }
 
       final response = await http.get(
@@ -199,8 +199,8 @@ class TimesheetService {
     try {
       print('🔍 [TimesheetService] Getting timesheet for current user, period: $period');
 
-      // ✅ CHANGED: Gunakan endpoint original yang otomatis ambil data user login
-      String url = '$baseUrl/timesheet/periods';
+      // ✅ CHANGED: Gunakan endpoint Flutter yang baru
+      String url = '$baseUrl/timesheet';
       
       // Hanya tambah period filter jika ada
       if (period != null && period.isNotEmpty) {
@@ -222,8 +222,18 @@ class TimesheetService {
         final Map<String, dynamic> jsonResponse = json.decode(response.body);
 
         if (jsonResponse['success'] == true) {
-          List<dynamic> rawData = jsonResponse['data'] ?? [];
+          // ✅ FIXED: Handle both Map and List response formats
+          dynamic rawData = jsonResponse['data'];
           List<Map<String, dynamic>> timesheets = [];
+          
+          // If data is a Map, convert to list format
+          if (rawData is Map<String, dynamic>) {
+            // Response is a single object, wrap in list
+            rawData = [rawData];
+          } else if (rawData is! List) {
+            // Fallback to empty list if unexpected format
+            rawData = [];
+          }
 
           for (var item in rawData) {
             try {
@@ -317,7 +327,7 @@ class TimesheetService {
   ) async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/timesheet/extract-page/$period'),
+        Uri.parse('$baseUrl/flutter/timesheet/$period/pdf'),
         headers: {
           'Authorization': 'Bearer $token',
           'Accept': 'application/pdf',

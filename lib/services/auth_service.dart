@@ -115,12 +115,24 @@ class AuthService {
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200 && data['success'] == true) {
-        // Ekstrak token dan user dari response Laravel
-        final token = data['data']['token'];
-        final userData = data['data']['user'];
+        // Handle response format dari Laravel Flutter endpoint
+        print('Raw data structure: $data');
+        final responseData = data['data']; // Get data object first
+        print('Response data: $responseData');
+        
+        if (responseData == null) {
+          throw Exception('Response data is null');
+        }
+        
+        final token = responseData['token']; // Get token from data object
+        final userData = responseData['user']; // Get user from data object
 
         print('Token received: ${token?.substring(0, 20)}...');
         print('User data: $userData');
+
+        if (token == null || userData == null) {
+          throw Exception('Token or user data is null');
+        }
 
         final user = User.fromJson(userData);
 
@@ -203,7 +215,7 @@ class AuthService {
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200 && data['success'] == true) {
-        final user = User.fromJson(data['data']);
+        final user = User.fromJson(data['data']); // Fix: get user from data object
         await saveUser(user); // Update cached user data
         print('User loaded successfully: ${user.name}');
         return AuthResult.success(user: user);

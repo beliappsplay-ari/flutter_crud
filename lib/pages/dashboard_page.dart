@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_crud/pages/halaman_produk.dart';
 import 'package:flutter_crud/pages/user_profile_page.dart';
-import 'package:flutter_crud/pages/assets_salary_slip_page.dart';
-import 'package:flutter_crud/pages/salary_slip_page.dart';
+import 'assets_salary_slip_page.dart'; // Import salary slip page
 import 'package:flutter_crud/pages/timesheet_page.dart'; // Import timesheet page
 import '../services/auth_service.dart';
 import '../services/assets_pdf_service.dart';
+import '../services/menu_service.dart'; // Import menu service
 import '../models/assets_salary_slip.dart';
 import 'assets_pdf_viewer.dart';
 import 'login_page.dart';
@@ -146,10 +145,110 @@ class _DashboardPageState extends State<DashboardPage> {
 }
 
 // Dashboard Home Page dengan menu grid
-class DashboardHomePage extends StatelessWidget {
+class DashboardHomePage extends StatefulWidget {
   final Function(int)? onNavigate;
 
   const DashboardHomePage({super.key, this.onNavigate});
+
+  @override
+  State<DashboardHomePage> createState() => _DashboardHomePageState();
+}
+
+class _DashboardHomePageState extends State<DashboardHomePage> {
+  List<MenuItem> _menuItems = [];
+  EmployeeInfo? _employeeInfo;
+  bool _isLoadingMenu = true;
+  String? _menuError;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMenuAccess();
+  }
+
+  Future<void> _loadMenuAccess() async {
+    try {
+      setState(() {
+        _isLoadingMenu = true;
+        _menuError = null;
+      });
+
+      print('🔄 [DashboardHomePage] Loading menu access...');
+
+      final response = await MenuService.getUserMenuAccess();
+
+      if (response != null && response['success'] == true) {
+        final data = response['data'];
+        
+        // Parse employee info
+        _employeeInfo = EmployeeInfo.fromJson(data['employee_info']);
+        
+        // Parse menu items
+        final menusData = List<Map<String, dynamic>>.from(data['menus'] ?? []);
+        _menuItems = menusData.map((menu) => MenuItem.fromJson(menu)).toList();
+        
+        print('✅ [DashboardHomePage] Menu loaded: ${_menuItems.length} items');
+        print('👤 [DashboardHomePage] Employee: ${_employeeInfo?.fullname}');
+        print('🔑 [DashboardHomePage] Access: ${_employeeInfo?.accessString}');
+        
+        setState(() {
+          _isLoadingMenu = false;
+        });
+      } else {
+        throw Exception('Failed to load menu access');
+      }
+    } catch (e) {
+      print('❌ [DashboardHomePage] Error loading menu: $e');
+      setState(() {
+        _menuError = e.toString();
+        _isLoadingMenu = false;
+        // Fallback to default menus if API fails
+        _loadDefaultMenus();
+      });
+    }
+  }
+
+  void _loadDefaultMenus() {
+    print('🔄 [DashboardHomePage] Loading default fallback menus...');
+    _menuItems = [
+      MenuItem(
+        id: 'employees',
+        title: 'Employees',
+        subtitle: 'Manage employee data',
+        icon: 'people',
+        color: 'blue',
+        route: '/employees',
+        enabled: false,
+      ),
+      MenuItem(
+        id: 'salary_slip',
+        title: 'Salary Slips',
+        subtitle: 'View salary slips',
+        icon: 'cloud_download',
+        color: 'primary',
+        route: '/salary-slips',
+        enabled: true,
+      ),
+      MenuItem(
+        id: 'timesheet',
+        title: 'Timesheet',
+        subtitle: 'View timesheet reports',
+        icon: 'schedule',
+        color: 'orange',
+        route: '/timesheet',
+        enabled: true,
+      ),
+      MenuItem(
+        id: 'reports',
+        title: 'Reports',
+        subtitle: 'View analytics & reports',
+        icon: 'analytics',
+        color: 'purple',
+        route: '/reports',
+        enabled: false,
+      ),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -158,40 +257,8 @@ class DashboardHomePage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Welcome Section
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Theme.of(context).primaryColor,
-                  Theme.of(context).primaryColor.withOpacity(0.8),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Welcome!',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  'HRIS - DIAN GARAHA ELEKTRIKA',
-                  style: TextStyle(color: Colors.white70, fontSize: 16),
-                ),
-              ],
-            ),
-          ),
+          // Welcome Section with Employee Info
+          _buildWelcomeSection(),
 
           const SizedBox(height: 24),
 
@@ -203,153 +270,266 @@ class DashboardHomePage extends StatelessWidget {
 
           const SizedBox(height: 16),
 
-          // Menu Grid - MENAMBAHKAN TIMESHEET DI SINI
+          // Loading or Menu Grid
           Expanded(
-            child: GridView.count(
-              crossAxisCount: 2,
-              mainAxisSpacing: 16,
-              crossAxisSpacing: 16,
-              children: [
-                _buildMenuCard(
-                  context,
-                  icon: Icons.people,
-                  title: 'Employees',
-                  subtitle: 'Manage employee data',
-                  color: Colors.blue,
-                  onTap: () {
-                    // Navigate to employees page (for now, show message)
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Employees feature - coming soon!'),
-                      ),
-                    );
-                  },
-                ),
-                _buildMenuCard(
-                  context,
-                  icon: Icons.cloud_download,
-                  title: 'Salary slips',
-                  subtitle: 'View salary slips',
-                  color: Theme.of(context).colorScheme.primary,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const AssetsSalarySlipPage(),
-                      ),
-                    );
-                  },
-                ),
-                // MENU TIMESHEET BARU - DITAMBAHKAN DI SINI
-                _buildMenuCard(
-                  context,
-                  icon: Icons.schedule,
-                  title: 'Timesheet',
-                  subtitle: 'View timesheet reports',
-                  color: Colors.orange,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => TimesheetPage()),
-                    );
-                  },
-                ),
-                _buildMenuCard(
-                  context,
-                  icon: Icons.analytics,
-                  title: 'Reports',
-                  subtitle: 'View analytics & reports',
-                  color: Colors.purple,
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Reports feature - coming soon!'),
-                      ),
-                    );
-                  },
-                ),
-                _buildMenuCard(
-                  context,
-                  icon: Icons.settings,
-                  title: 'Settings',
-                  subtitle: 'App configuration',
-                  color: Colors.grey,
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Settings feature - coming soon!'),
-                      ),
-                    );
-                  },
-                ),
-                // TAMBAHAN MENU LAINNYA BISA DITAMBAHKAN DI SINI
-                _buildMenuCard(
-                  context,
-                  icon: Icons.folder_open,
-                  title: 'Documents',
-                  subtitle: 'View documents',
-                  color: Colors.teal,
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Documents feature - coming soon!'),
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
+            child: _isLoadingMenu ? _buildLoadingView() : _buildMenuGrid(),
           ),
         ],
       ),
     );
   }
 
+  Widget _buildWelcomeSection() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Theme.of(context).primaryColor,
+            Theme.of(context).primaryColor.withOpacity(0.8),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _employeeInfo != null 
+                ? 'Welcome, ${_employeeInfo!.fullname}!'
+                : 'Welcome!',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _employeeInfo != null
+                ? 'HRIS - Employee ID: ${_employeeInfo!.empno}'
+                : 'HRIS - DIAN GARAHA ELEKTRIKA',
+            style: const TextStyle(color: Colors.white70, fontSize: 16),
+          ),
+          if (_employeeInfo != null && _employeeInfo!.accessString.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Access Level: ${_employeeInfo!.accessString}',
+              style: const TextStyle(color: Colors.white60, fontSize: 14),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingView() {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(),
+          SizedBox(height: 16),
+          Text('Loading menu access...'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMenuGrid() {
+    if (_menuError != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 64, color: Colors.red),
+            const SizedBox(height: 16),
+            Text(
+              'Error loading menu: $_menuError',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.red),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _loadMenuAccess,
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_menuItems.isEmpty) {
+      return const Center(
+        child: Text(
+          'No menu items available',
+          style: TextStyle(fontSize: 16, color: Colors.grey),
+        ),
+      );
+    }
+
+    return GridView.builder(
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        mainAxisSpacing: 16,
+        crossAxisSpacing: 16,
+      ),
+      itemCount: _menuItems.length,
+      itemBuilder: (context, index) {
+        final menu = _menuItems[index];
+        return _buildMenuCard(
+          context,
+          menuItem: menu,
+        );
+      },
+    );
+  }
+
   Widget _buildMenuCard(
     BuildContext context, {
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required Color color,
-    required VoidCallback onTap,
+    required MenuItem menuItem,
   }) {
+    // Map icon names to IconData
+    IconData getIcon(String iconName) {
+      switch (iconName) {
+        case 'people':
+          return Icons.people;
+        case 'cloud_download':
+          return Icons.cloud_download;
+        case 'schedule':
+          return Icons.schedule;
+        case 'analytics':
+          return Icons.analytics;
+        case 'settings':
+          return Icons.settings;
+        case 'folder_open':
+          return Icons.folder_open;
+        default:
+          return Icons.help;
+      }
+    }
+
+    // Map color names to Colors
+    Color getColor(String colorName) {
+      switch (colorName) {
+        case 'primary':
+          return Theme.of(context).colorScheme.primary;
+        case 'blue':
+          return Colors.blue;
+        case 'orange':
+          return Colors.orange;
+        case 'purple':
+          return Colors.purple;
+        case 'grey':
+          return Colors.grey;
+        case 'teal':
+          return Colors.teal;
+        default:
+          return Colors.grey;
+      }
+    }
+
+    // Handle menu tap
+    void handleMenuTap() {
+      if (!menuItem.enabled) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${menuItem.title} feature - coming soon!'),
+          ),
+        );
+        return;
+      }
+
+      // Navigate based on menu ID
+      switch (menuItem.id) {
+        case 'salary_slip':
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const AssetsSalarySlipPage(),
+            ),
+          );
+          break;
+        case 'timesheet':
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => TimesheetPage()),
+          );
+          break;
+        default:
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${menuItem.title} feature - coming soon!'),
+            ),
+          );
+      }
+    }
+
+    final icon = getIcon(menuItem.icon);
+    final color = getColor(menuItem.color);
+    final isEnabled = menuItem.enabled;
+
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: InkWell(
-        onTap: onTap,
+        onTap: handleMenuTap,
         borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(16),
+        child: Opacity(
+          opacity: isEnabled ? 1.0 : 0.6,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(icon, size: 32, color: color),
                 ),
-                child: Icon(icon, size: 32, color: color),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
+                const SizedBox(height: 12),
+                Text(
+                  menuItem.title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+                const SizedBox(height: 4),
+                Text(
+                  menuItem.subtitle,
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (!isEnabled) ...[
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      'Coming Soon',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.orange,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
       ),
