@@ -3,6 +3,7 @@ import 'package:flutter_crud/pages/halaman_produk.dart';
 import 'package:flutter_crud/pages/user_profile_page.dart';
 import 'package:flutter_crud/pages/assets_salary_slip_page.dart';
 import 'package:flutter_crud/pages/salary_slip_page.dart';
+import 'package:flutter_crud/pages/timesheet_page.dart'; // Import timesheet page
 import '../services/auth_service.dart';
 import '../services/assets_pdf_service.dart';
 import '../models/assets_salary_slip.dart';
@@ -202,7 +203,7 @@ class DashboardHomePage extends StatelessWidget {
 
           const SizedBox(height: 16),
 
-          // Menu Grid
+          // Menu Grid - MENAMBAHKAN TIMESHEET DI SINI
           Expanded(
             child: GridView.count(
               crossAxisCount: 2,
@@ -239,6 +240,20 @@ class DashboardHomePage extends StatelessWidget {
                     );
                   },
                 ),
+                // MENU TIMESHEET BARU - DITAMBAHKAN DI SINI
+                _buildMenuCard(
+                  context,
+                  icon: Icons.schedule,
+                  title: 'Timesheet',
+                  subtitle: 'View timesheet reports',
+                  color: Colors.orange,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => TimesheetPage()),
+                    );
+                  },
+                ),
                 _buildMenuCard(
                   context,
                   icon: Icons.analytics,
@@ -263,6 +278,21 @@ class DashboardHomePage extends StatelessWidget {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text('Settings feature - coming soon!'),
+                      ),
+                    );
+                  },
+                ),
+                // TAMBAHAN MENU LAINNYA BISA DITAMBAHKAN DI SINI
+                _buildMenuCard(
+                  context,
+                  icon: Icons.folder_open,
+                  title: 'Documents',
+                  subtitle: 'View documents',
+                  color: Colors.teal,
+                  onTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Documents feature - coming soon!'),
                       ),
                     );
                   },
