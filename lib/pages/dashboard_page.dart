@@ -314,13 +314,7 @@ class _DashboardHomePageState extends State<DashboardHomePage> {
                 : 'HRIS - DIAN GARAHA ELEKTRIKA',
             style: const TextStyle(color: Colors.white70, fontSize: 16),
           ),
-          if (_employeeInfo != null && _employeeInfo!.accessString.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(
-              'Access Level: ${_employeeInfo!.accessString}',
-              style: const TextStyle(color: Colors.white60, fontSize: 14),
-            ),
-          ],
+
         ],
       ),
     );

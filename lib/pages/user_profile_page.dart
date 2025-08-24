@@ -200,6 +200,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
             const SizedBox(height: 16),
             _buildInfoRow('Emp. Number', employee.empno),
             _buildInfoRow('Full Name', employee.fullname),
+            if (employee.akses != null && employee.akses!.isNotEmpty)
+              _buildInfoRow('Access Level', employee.akses!),
           ],
         ),
       ),

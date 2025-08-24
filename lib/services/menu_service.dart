@@ -9,17 +9,17 @@ class MenuService {
   static Future<Map<String, dynamic>?> getUserMenuAccess() async {
     try {
       print('🔍 [MenuService] Getting user menu access...');
-      
+
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token');
-      
+
       if (token == null) {
         print('❌ [MenuService] No token found');
         return null;
       }
-      
+
       print('🔍 [MenuService] Token found, calling API...');
-      
+
       final response = await http.get(
         Uri.parse('$baseUrl/api/flutter/menu-access'),
         headers: {
@@ -28,14 +28,18 @@ class MenuService {
           'Authorization': 'Bearer $token',
         },
       );
-      
+
       print('📡 [MenuService] Response status: ${response.statusCode}');
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         print('✅ [MenuService] Menu access data received');
-        print('📋 [MenuService] Employee: ${data['data']['employee_info']['fullname']}');
-        print('🔑 [MenuService] Access: ${data['data']['employee_info']['access_string']}');
+        print(
+          '📋 [MenuService] Employee: ${data['data']['employee_info']['fullname']}',
+        );
+        print(
+          '🔑 [MenuService] Access: ${data['data']['employee_info']['access_string']}',
+        );
         print('📱 [MenuService] Total menus: ${data['total_menus']}');
         return data;
       } else {

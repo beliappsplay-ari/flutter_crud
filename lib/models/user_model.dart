@@ -37,6 +37,7 @@ class Employee {
   final String empno;
   final String fullname;
   final int? userId;
+  final String? akses; // Access level field
   final City? city;
   final Gender? gender;
   final MaritalStatus? maritalStatus;
@@ -50,6 +51,7 @@ class Employee {
     required this.empno,
     required this.fullname,
     this.userId,
+    this.akses, // Access level field
     this.city,
     this.gender,
     this.maritalStatus,
@@ -65,6 +67,7 @@ class Employee {
       empno: json['empno'] ?? '',
       fullname: json['fullname'] ?? '',
       userId: json['user_id'],
+      akses: json['akses'], // Parse access level from API response
       city: json['city'] != null ? City.fromJson(json['city']) : null,
       gender: json['gender'] != null ? Gender.fromJson(json['gender']) : null,
       maritalStatus: json['maritalstatus'] != null
@@ -87,6 +90,7 @@ class Employee {
       'empno': empno,
       'fullname': fullname,
       'user_id': userId,
+      'akses': akses, // Include access level in JSON
       'city': city?.toJson(),
       'gender': gender?.toJson(),
       'maritalstatus': maritalStatus?.toJson(),
